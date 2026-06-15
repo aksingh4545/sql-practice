@@ -2580,6 +2580,10 @@ document.addEventListener('click', function(e) {
 // ─────────────────────────────────────────────
 const LEARN_TOPICS = [
   { icon: '🔍', title: 'SELECT Basics', desc: 'Choose columns and filter data', query: 'SELECT name, salary FROM employees WHERE salary > 80000;' },
+  { icon: '⚖️', title: 'LEFT vs RIGHT JOIN', desc: 'Compare left vs right joins and see unmatched rows in real-time', query: '-- LEFT JOIN keeps unmatched rows from left table (employees)\nSELECT e.name, d.name AS dept\nFROM employees e\nLEFT JOIN departments d ON e.department_id = d.id;', badge: 'badge-blue', badgeText: 'Visual Guide' },
+  { icon: '🎙️', title: 'Interview Q: 2nd Highest Salary', desc: 'Find the second highest unique salary in the company', query: '-- Find the 2nd highest unique salary\nSELECT DISTINCT salary \nFROM employees \nORDER BY salary DESC \nLIMIT 1 OFFSET 1;', badge: 'badge-purple', badgeText: 'Interview Prep' },
+  { icon: '🎙️', title: 'Interview Q: Find Duplicates', desc: 'Find departments with duplicate employee assignments', query: '-- Find departments with duplicate employee counts\nSELECT department, COUNT(*) AS employee_count\nFROM employees\nGROUP BY department\nHAVING COUNT(*) > 1;', badge: 'badge-purple', badgeText: 'Interview Prep' },
+  { icon: '🎙️', title: 'Interview Q: Highest Paid in Dept', desc: 'Find the highest paid employee in each department', query: '-- Find the highest paid employee in each department\nSELECT name, department, salary\nFROM employees e1\nWHERE salary = (\n  SELECT MAX(salary)\n  FROM employees e2\n  WHERE e2.department = e1.department\n);', badge: 'badge-purple', badgeText: 'Interview Prep' },
   { icon: '⋈', title: 'JOINs Explained', desc: 'Combine data from multiple tables', query: 'SELECT e.name, d.name as dept FROM employees e INNER JOIN departments d ON e.department_id = d.id;' },
   { icon: '⊕', title: 'GROUP BY & Aggregates', desc: 'Summarize data with COUNT, SUM, AVG', query: 'SELECT department, COUNT(*) as cnt, AVG(salary) as avg_sal FROM employees GROUP BY department HAVING COUNT(*) > 1 ORDER BY avg_sal DESC;' },
   { icon: '🪟', title: 'Window Functions', desc: 'Rank, number rows, calculate running totals', query: 'SELECT name, salary, department, RANK() OVER (PARTITION BY department ORDER BY salary DESC) as dept_rank, SUM(salary) OVER (PARTITION BY department ORDER BY salary) as running_total FROM employees;' },
@@ -2593,23 +2597,178 @@ const LEARN_TOPICS = [
 
 function renderLearnContent() {
   const container = document.getElementById('learn-content');
+  
+  // Render core topics
+  const coreHTML = LEARN_TOPICS.map((t, i) => {
+    if (t.badgeText === 'Interview Prep') return '';
+    return `
+      <div class="learn-card" onclick="loadLearnTopic(${i})">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+          <div class="learn-card-icon">${t.icon}</div>
+          ${t.badge ? `<span class="badge ${t.badge}" style="font-size:9.5px; padding: 2px 6px; border-radius: 12px; font-weight: 550;">${t.badgeText}</span>` : ''}
+        </div>
+        <div class="learn-card-title">${esc(t.title)}</div>
+        <div class="learn-card-desc">${esc(t.desc)}</div>
+      </div>
+    `;
+  }).join('');
+
+  // Render interview prep topics
+  const interviewHTML = LEARN_TOPICS.map((t, i) => {
+    if (t.badgeText !== 'Interview Prep') return '';
+    return `
+      <div class="learn-card" onclick="loadLearnTopic(${i})">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+          <div class="learn-card-icon">${t.icon}</div>
+          ${t.badge ? `<span class="badge ${t.badge}" style="font-size:9.5px; padding: 2px 6px; border-radius: 12px; font-weight: 550;">${t.badgeText}</span>` : ''}
+        </div>
+        <div class="learn-card-title">${esc(t.title)}</div>
+        <div class="learn-card-desc">${esc(t.desc)}</div>
+      </div>
+    `;
+  }).join('');
+
   container.innerHTML = `
     <p style="color:var(--text-secondary);font-size:13px;margin-bottom:16px">Click a topic to load its example query and see it visualized instantly.</p>
+    
+    <h3 style="color:var(--text-primary); font-size:14px; margin: 0 0 12px 0; border-bottom:1px solid var(--border-secondary); padding-bottom:8px; display:flex; align-items:center; gap:8px; font-weight: 700;">
+      <span>📖</span> Core SQL Concepts
+    </h3>
+    <div class="learn-grid" style="margin-bottom: 24px;">
+      ${coreHTML}
+    </div>
+    
+    <h3 style="color:var(--accent-purple); font-size:14px; margin: 24px 0 12px 0; border-bottom:1px solid var(--border-secondary); padding-bottom:8px; display:flex; align-items:center; gap:8px; font-weight: 700;">
+      <span>🎙️</span> SQL Interview Questions
+    </h3>
     <div class="learn-grid">
-      ${LEARN_TOPICS.map((t, i) => `
-        <div class="learn-card" onclick="loadLearnTopic(${i})">
-          <div class="learn-card-icon">${t.icon}</div>
-          <div class="learn-card-title">${esc(t.title)}</div>
-          <div class="learn-card-desc">${esc(t.desc)}</div>
-        </div>
-      `).join('')}
+      ${interviewHTML}
     </div>
   `;
+}
+
+function renderJoinComparison() {
+  const container = document.getElementById('learn-content');
+  container.innerHTML = `
+    <div class="join-comparison-view">
+      <button class="btn-secondary" id="btn-back-to-learn" style="margin-bottom:20px; display:flex; align-items:center; gap:6px; background:var(--bg-tertiary); border:1px solid var(--border-primary); color:var(--text-primary); padding:6px 12px; border-radius:6px; cursor:pointer;">
+        ← Back to Topics
+      </button>
+      
+      <div style="display:flex; flex-direction:column; align-items:center; gap:16px; margin-bottom:24px;">
+        <h3 style="margin:0; color:var(--text-primary); font-size:15px; font-weight:700;">Interactive Venn Diagram</h3>
+        <p style="color:var(--text-secondary); font-size:12px; margin:0; text-align:center; max-width:400px; line-height:1.5;">
+          Click the <strong>left side</strong> of the Venn diagram to run <strong>LEFT JOIN</strong>.<br/>
+          Click the <strong>right side</strong> of the Venn diagram to run <strong>RIGHT JOIN</strong>.
+        </p>
+        
+        <!-- SVG Venn Diagram -->
+        <svg width="340" height="180" viewBox="0 0 340 180" xmlns="http://www.w3.org/2000/svg" style="margin-top:10px;">
+          <!-- Define Clip Paths -->
+          <defs>
+            <clipPath id="clip-left"><circle cx="120" cy="90" r="70" /></clipPath>
+            <clipPath id="clip-right"><circle cx="220" cy="90" r="70" /></clipPath>
+          </defs>
+          
+          <!-- Left Circle (interactive) -->
+          <g id="venn-click-left" style="cursor:pointer; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+            <circle cx="120" cy="90" r="70" fill="rgba(56,189,248,0.25)" stroke="var(--accent-blue)" stroke-width="2.5" />
+            <text x="80" y="85" fill="var(--text-primary)" font-size="12" font-weight="700" text-anchor="middle">employees</text>
+            <text x="80" y="103" fill="var(--text-secondary)" font-size="9" text-anchor="middle">(Left Table)</text>
+          </g>
+          
+          <!-- Right Circle (interactive) -->
+          <g id="venn-click-right" style="cursor:pointer; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+            <circle cx="220" cy="90" r="70" fill="rgba(52,211,153,0.25)" stroke="var(--accent-green)" stroke-width="2.5" />
+            <text x="260" y="85" fill="var(--text-primary)" font-size="12" font-weight="700" text-anchor="middle">departments</text>
+            <text x="260" y="103" fill="var(--text-secondary)" font-size="9" text-anchor="middle">(Right Table)</text>
+          </g>
+
+          <!-- Shared Intersection region -->
+          <g clip-path="url(#clip-left)">
+            <circle cx="220" cy="90" r="70" fill="rgba(99,102,241,0.45)" />
+          </g>
+          
+          <!-- Outlines (pointer-events none so they don't block clicks) -->
+          <circle cx="120" cy="90" r="70" fill="none" stroke="var(--accent-blue)" stroke-width="2.5" pointer-events="none" />
+          <circle cx="220" cy="90" r="70" fill="none" stroke="var(--accent-green)" stroke-width="2.5" pointer-events="none" />
+          
+          <text x="170" y="90" fill="#fff" font-size="11" font-weight="700" text-anchor="middle" pointer-events="none">Match</text>
+        </svg>
+      </div>
+      
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; border-top:1px solid var(--border-secondary); padding-top:20px;">
+        <!-- LEFT JOIN Details -->
+        <div style="background:var(--bg-secondary); border:1px solid var(--border-primary); border-radius:8px; padding:16px; cursor:pointer; transition:all 0.2s; display:flex; flex-direction:column;" 
+             onmouseover="this.style.borderColor='var(--accent-blue)'" onmouseout="this.style.borderColor='var(--border-primary)'"
+             id="left-join-details-btn">
+          <h4 style="margin:0 0 8px 0; color:var(--accent-blue); display:flex; align-items:center; gap:8px; font-size:14px; font-weight:700;">
+            <span>💙</span> LEFT JOIN
+          </h4>
+          <pre style="background:var(--bg-tertiary); padding:10px; border-radius:6px; font-size:11px; margin:0 0 12px 0; overflow-x:auto; color:var(--text-primary); font-family: monospace;">SELECT e.name, d.name AS dept
+FROM employees e
+LEFT JOIN departments d
+ON e.department_id = d.id;</pre>
+          <div style="font-size:12px; color:var(--text-secondary); flex:1;">
+            <strong>Meaning:</strong>
+            <p style="margin:6px 0 0 0; line-height:1.4;">Keep ALL rows from employees (left table). Add department data if a match exists.</p>
+          </div>
+          <button class="btn-run" style="margin-top:12px; width:100%; font-size:11px; background:var(--accent-blue); border:none; padding:8px; border-radius:6px; color:white; font-weight:600; cursor:pointer;">Run LEFT JOIN</button>
+        </div>
+        
+        <!-- RIGHT JOIN Details -->
+        <div style="background:var(--bg-secondary); border:1px solid var(--border-primary); border-radius:8px; padding:16px; cursor:pointer; transition:all 0.2s; display:flex; flex-direction:column;"
+             onmouseover="this.style.borderColor='var(--accent-green)'" onmouseout="this.style.borderColor='var(--border-primary)'"
+             id="right-join-details-btn">
+          <h4 style="margin:0 0 8px 0; color:var(--accent-green); display:flex; align-items:center; gap:8px; font-size:14px; font-weight:700;">
+            <span>💚</span> RIGHT JOIN
+          </h4>
+          <pre style="background:var(--bg-tertiary); padding:10px; border-radius:6px; font-size:11px; margin:0 0 12px 0; overflow-x:auto; color:var(--text-primary); font-family: monospace;">SELECT e.name, d.name AS dept
+FROM employees e
+RIGHT JOIN departments d
+ON e.department_id = d.id;</pre>
+          <div style="font-size:12px; color:var(--text-secondary); flex:1;">
+            <strong>Meaning:</strong>
+            <p style="margin:6px 0 0 0; line-height:1.4;">Keep ALL rows from departments (right table). Add employee data if a match exists.</p>
+          </div>
+          <button class="btn-run" style="margin-top:12px; width:100%; font-size:11px; background:var(--accent-green); border:none; padding:8px; border-radius:6px; color:white; font-weight:600; cursor:pointer;">Run RIGHT JOIN</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Attach event handlers
+  container.querySelector('#btn-back-to-learn').addEventListener('click', renderLearnContent);
+
+  const runLeft = () => {
+    editor.value = `-- LEFT JOIN keeps unmatched rows from left table (employees)\nSELECT e.name, d.name AS dept\nFROM employees e\nLEFT JOIN departments d\nON e.department_id = d.id;`;
+    updateGutter();
+    document.getElementById('learn-modal').style.display = 'none';
+    runQuery();
+  };
+
+  const runRight = () => {
+    editor.value = `-- RIGHT JOIN keeps unmatched rows from right table (departments)\nSELECT e.name, d.name AS dept\nFROM employees e\nRIGHT JOIN departments d\nON e.department_id = d.id;`;
+    updateGutter();
+    document.getElementById('learn-modal').style.display = 'none';
+    runQuery();
+  };
+
+  container.querySelector('#venn-click-left').addEventListener('click', runLeft);
+  container.querySelector('#venn-click-right').addEventListener('click', runRight);
+  container.querySelector('#left-join-details-btn').addEventListener('click', runLeft);
+  container.querySelector('#right-join-details-btn').addEventListener('click', runRight);
 }
 
 window.loadLearnTopic = function(index) {
   const topic = LEARN_TOPICS[index];
   if (!topic) return;
+
+  if (topic.title === 'LEFT vs RIGHT JOIN') {
+    renderJoinComparison();
+    return;
+  }
+
   editor.value = topic.query;
   updateGutter();
   document.getElementById('learn-modal').style.display = 'none';
@@ -2969,11 +3128,7 @@ document.querySelectorAll('.quick-start-btn').forEach(btn => {
   grid.innerHTML = joinDefs.map((def, idx) => {
     const uid = `vc-${idx}`;
     return `
-      <div class="venn-card" title="Click to run: ${def.type}" onclick="
-        document.getElementById('sql-editor').value = ${JSON.stringify(def.query)};
-        if(typeof updateGutter==='function') updateGutter();
-        if(typeof runQuery==='function') runQuery();
-      ">
+      <div class="venn-card" title="Click to run: ${def.type}" data-idx="${idx}">
         <svg class="venn-card-svg" viewBox="0 0 110 60" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <clipPath id="${uid}-l"><circle cx="38" cy="30" r="24"/></clipPath>
@@ -3002,6 +3157,16 @@ document.querySelectorAll('.quick-start-btn').forEach(btn => {
       </div>
     `;
   }).join('');
+
+  grid.querySelectorAll('.venn-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const idx = parseInt(card.dataset.idx, 10);
+      const queryStr = joinDefs[idx].query;
+      editor.value = queryStr;
+      if (typeof updateGutter === 'function') updateGutter();
+      if (typeof runQuery === 'function') runQuery();
+    });
+  });
 })();
 
 // ─────────────────────────────────────────────

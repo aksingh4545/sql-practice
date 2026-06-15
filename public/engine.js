@@ -2039,7 +2039,7 @@ class SQLEngine {
     if (!col) return '';
     if (col.type === 'alias') return col.alias;
     if (col.type === 'star') return col.table ? `${col.table}.*` : '*';
-    if (col.type === 'column') return col.table ? `${col.table}.${col.name}` : col.name;
+    if (col.type === 'column') return col.name;
     if (col.type === 'function') return `${col.name}(${col.args.map(a => this.exprToString(a)).join(', ')})`;
     return this.exprToString(col);
   }
