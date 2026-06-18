@@ -6,7 +6,10 @@ import Script from 'next/script';
 export default function Home() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
-    setMounted(true);
+    const timer = setTimeout(() => {
+      setMounted(true);
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   if (!mounted) {

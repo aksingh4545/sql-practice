@@ -301,6 +301,52 @@ function getCaretCoordinates(el, pos) {
   return { top: offsetTop - el.scrollTop, left: offsetLeft - el.scrollLeft };
 }
 
+function convertQueryToCapital(sql) {
+  if (!sql) return { text: '', changed: false };
+  let i = 0;
+  let result = '';
+  let changed = false;
+  
+  while (i < sql.length) {
+    if (sql.startsWith('--', i)) {
+      let end = sql.indexOf('\n', i);
+      if (end === -1) end = sql.length;
+      result += sql.slice(i, end);
+      i = end;
+      continue;
+    }
+    if (sql[i] === "'" || sql[i] === '"') {
+      const q = sql[i];
+      let end = i + 1;
+      while (end < sql.length && sql[end] !== q) {
+        if (sql[end] === '\\') end++;
+        end++;
+      }
+      end++;
+      result += sql.slice(i, end);
+      i = end;
+      continue;
+    }
+    if (/[a-zA-Z]/.test(sql[i])) {
+      let end = i;
+      while (end < sql.length && /[a-zA-Z0-9_$]/.test(sql[end])) end++;
+      const word = sql.slice(i, end);
+      const upper = word.toUpperCase();
+      if (word !== upper) {
+        result += upper;
+        changed = true;
+      } else {
+        result += word;
+      }
+      i = end;
+      continue;
+    }
+    result += sql[i];
+    i++;
+  }
+  return { text: result, changed };
+}
+
 function applyAutocomplete(index) {
   const item = autocompleteItems[index];
   if (!item) return;
@@ -311,18 +357,33 @@ function applyAutocomplete(index) {
   if (!match) return;
   const start = pos - match[1].length;
   const label = item.label;
-  editor.value = text.substr(0, start) + label + text.substr(pos);
+  const newVal = text.substr(0, start) + label + text.substr(pos);
+  const { text: capitalized } = convertQueryToCapital(newVal);
+  editor.value = capitalized;
   editor.selectionStart = editor.selectionEnd = start + label.length;
   autocompleteDropdown.style.display = 'none';
   editor.focus();
   updateGutter();
+  saveProgressToBrowser();
 }
 
 editor.addEventListener('input', () => {
+  // Auto convert small letter queries to CAPITAL letter (excluding comments and strings)
+  const start = editor.selectionStart;
+  const end = editor.selectionEnd;
+  const originalVal = editor.value;
+  const { text: newVal, changed } = convertQueryToCapital(originalVal);
+  if (changed) {
+    editor.value = newVal;
+    editor.selectionStart = start;
+    editor.selectionEnd = end;
+  }
+  
   updateGutter();
   const items = getAutocompleteItems(editor.value, editor.selectionStart);
   showAutocomplete(items, editor.value, editor.selectionStart);
   autoRunIfEnabled();
+  saveProgressToBrowser();
 });
 
 editor.addEventListener('keydown', (e) => {
@@ -338,6 +399,9 @@ editor.addEventListener('keydown', (e) => {
     } else if (e.key === 'Enter' && autocompleteSelectedIndex >= 0) {
       e.preventDefault();
       applyAutocomplete(autocompleteSelectedIndex);
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      applyAutocomplete(autocompleteSelectedIndex >= 0 ? autocompleteSelectedIndex : 0);
     } else if (e.key === 'Escape') {
       autocompleteDropdown.style.display = 'none';
     }
@@ -350,6 +414,7 @@ editor.addEventListener('keydown', (e) => {
     editor.value = editor.value.substr(0, start) + '  ' + editor.value.substr(end);
     editor.selectionStart = editor.selectionEnd = start + 2;
     updateGutter();
+    saveProgressToBrowser();
   }
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
     e.preventDefault();
@@ -1161,9 +1226,11 @@ function addToHistory(sql, time, result) {
         const idx = parseInt(el.dataset.index);
         editor.value = State.queryHistory[idx].sql;
         updateGutter();
+        saveProgressToBrowser();
       });
     });
   }
+  saveProgressToBrowser();
 }
 
 // ─────────────────────────────────────────────
@@ -1405,6 +1472,7 @@ function handleXP(sql, ast, result) {
   const levelNum = document.getElementById('level-num');
   if (xpCount) xpCount.textContent = State.xp + ' XP';
   if (levelNum) levelNum.textContent = State.level;
+  saveProgressToBrowser();
 }
 
 function showAchievement(data) {
@@ -2020,6 +2088,7 @@ function markQuestionSolved(id) {
 
     showAchievementMsg('🎯 Question Solved!', `#${q.id} Solved! (+${xpGained} XP)`);
   }
+  saveProgressToBrowser();
 }
 
 function updatePracticeProgress() {
@@ -2148,6 +2217,7 @@ function closeChallengeBar() {
   const hintBtn = document.getElementById('btn-challenge-hint');
   if (hintBar) hintBar.style.display = 'none';
   if (hintBtn) hintBtn.classList.remove('active');
+  saveProgressToBrowser();
 }
 
 window.toggleHint = function(id) {
@@ -2397,6 +2467,7 @@ window.tryQuestion = function(id) {
     execFlow.innerHTML = '';
   }
   if (scrubber) scrubber.style.display = 'none';
+  saveProgressToBrowser();
 };
 
 // Backward-compat alias so the nav-tab handler still works
@@ -3023,6 +3094,7 @@ document.getElementById('btn-format').addEventListener('click', () => {
   ).replace(/^(\n)+/, '').replace(/\s*,\s*/g, ',\n  ');
   editor.value = formatted;
   updateGutter();
+  saveProgressToBrowser();
 });
 
 document.getElementById('btn-clear').addEventListener('click', () => {
@@ -3033,6 +3105,7 @@ document.getElementById('btn-clear').addEventListener('click', () => {
   document.getElementById('execution-flow').style.display = 'none';
   document.getElementById('timeline-scrubber').style.display = 'none';
   State.currentSteps = [];
+  saveProgressToBrowser();
 });
 
 document.getElementById('btn-template').addEventListener('click', () => {
@@ -3730,11 +3803,118 @@ window.askTutorAboutQuest = function(idx) {
 document.getElementById('btn-generate-suggestions').addEventListener('click', generateAISuggestions);
 
 // ─────────────────────────────────────────────
+// LOCAL STORAGE PROGRESS PERSISTENCE
+// ─────────────────────────────────────────────
+function saveProgressToBrowser() {
+  try {
+    const progress = {
+      xp: State.xp,
+      level: State.level,
+      achievements: Array.from(State.achievements),
+      queriesRun: State.queriesRun,
+      queryHistory: State.queryHistory,
+      activeQuestionId: practiceState.activeQuestionId,
+      editorValue: editor.value
+    };
+    localStorage.setItem('sqlvis_progress', JSON.stringify(progress));
+  } catch (e) {
+    console.error('Error saving progress:', e);
+  }
+}
+
+function loadProgressFromBrowser() {
+  try {
+    const raw = localStorage.getItem('sqlvis_progress');
+    if (raw) {
+      const progress = JSON.parse(raw);
+      if (progress.xp !== undefined) {
+        State.xp = progress.xp;
+      }
+      if (progress.level !== undefined) {
+        State.level = progress.level;
+      }
+      if (progress.achievements !== undefined) {
+        State.achievements = new Set(progress.achievements);
+      }
+      if (progress.queriesRun !== undefined) {
+        State.queriesRun = progress.queriesRun;
+      }
+      if (progress.queryHistory !== undefined) {
+        State.queryHistory = progress.queryHistory;
+      }
+      if (progress.activeQuestionId !== undefined) {
+        practiceState.activeQuestionId = progress.activeQuestionId;
+        if (practiceState.activeQuestionId) {
+          restoreChallengeUI(practiceState.activeQuestionId);
+        }
+      }
+      if (progress.editorValue !== undefined) {
+        editor.value = progress.editorValue;
+      }
+
+      // Update UI elements for XP and level
+      const xpCount = document.getElementById('xp-count');
+      const levelNum = document.getElementById('level-num');
+      if (xpCount) xpCount.textContent = State.xp + ' XP';
+      if (levelNum) levelNum.textContent = State.level;
+
+      // Update query history tab
+      const container = document.getElementById('query-history');
+      if (container && State.queryHistory.length > 0) {
+        container.innerHTML = State.queryHistory.map((h, i) => `
+          <div class="history-item" data-index="${i}">
+            <span class="history-icon">${h.sql.trim().toUpperCase().startsWith('SELECT') ? '🔍' : h.sql.trim().toUpperCase().startsWith('INSERT') ? '➕' : h.sql.trim().toUpperCase().startsWith('UPDATE') ? '✏️' : h.sql.trim().toUpperCase().startsWith('DELETE') ? '🗑' : '⚙️'}</span>
+            <span class="history-query">${esc(h.sql.replace(/\s+/g,' '))}</span>
+            <span class="history-time">${h.ts}</span>
+          </div>
+        `).join('');
+
+        container.querySelectorAll('.history-item').forEach(el => {
+          el.addEventListener('click', () => {
+            const idx = parseInt(el.dataset.index);
+            editor.value = State.queryHistory[idx].sql;
+            updateGutter();
+            saveProgressToBrowser();
+          });
+        });
+      }
+    }
+  } catch (e) {
+    console.error('Error loading progress:', e);
+  }
+}
+
+function restoreChallengeUI(id) {
+  const q = PRACTICE_QUESTIONS.find(q => q.id === id);
+  if (!q) return;
+
+  // Show challenge bar
+  const bar = document.getElementById('challenge-bar');
+  const badgeEl = document.getElementById('challenge-bar-badge');
+  const textEl = document.getElementById('challenge-bar-text');
+  if (bar) bar.style.display = 'flex';
+  if (badgeEl) badgeEl.textContent = `Q${q.id} · Lv${q.level}`;
+  if (textEl) textEl.textContent = q.question;
+
+  // Show reveal solution button
+  const revWrap = document.getElementById('reveal-solution-wrap');
+  if (revWrap) revWrap.style.display = 'block';
+
+  // Remove any existing solution overlay
+  const existingOverlay = document.getElementById('solution-overlay');
+  if (existingOverlay) existingOverlay.remove();
+}
+
+// ─────────────────────────────────────────────
 // INITIALIZE
 // ─────────────────────────────────────────────
 function init() {
   initSampleDB();
   editor.value = DEFAULT_QUERY;
+  
+  // Load progress from browser
+  loadProgressFromBrowser();
+
   updateGutter();
   renderSchema();
 
