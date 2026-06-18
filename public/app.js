@@ -172,11 +172,31 @@ function highlightSQL(sql) {
       tokens.push(`<span class="comment-val">${esc(sql.slice(i, end))}</span>`);
       i = end; continue;
     }
+    if (sql.startsWith('/*', i)) {
+      let end = sql.indexOf('*/', i + 2);
+      if (end === -1) end = sql.length;
+      else end += 2;
+      tokens.push(`<span class="comment-val">${esc(sql.slice(i, end))}</span>`);
+      i = end; continue;
+    }
+    if (sql[i] === '#') {
+      let end = sql.indexOf('\n', i);
+      if (end === -1) end = sql.length;
+      tokens.push(`<span class="comment-val">${esc(sql.slice(i, end))}</span>`);
+      i = end; continue;
+    }
     if (sql[i] === "'" || sql[i] === '"') {
       const q = sql[i]; let end = i + 1;
       while (end < sql.length && sql[end] !== q) { if (sql[end] === '\\') end++; end++; }
-      end++;
+      if (end < sql.length) end++;
       tokens.push(`<span class="string-val">${esc(sql.slice(i, end))}</span>`);
+      i = end; continue;
+    }
+    if (sql[i] === '`') {
+      let end = i + 1;
+      while (end < sql.length && sql[end] !== '`') { if (sql[end] === '\\') end++; end++; }
+      if (end < sql.length) end++;
+      tokens.push(`<span class="backtick-val">${esc(sql.slice(i, end))}</span>`);
       i = end; continue;
     }
     if (/[0-9]/.test(sql[i])) {
@@ -195,6 +215,16 @@ function highlightSQL(sql) {
       else tokens.push(`<span class="table-name">${esc(word)}</span>`);
       i = end; continue;
     }
+    if (/[+\-*/%=<>!&|^~]/.test(sql[i])) {
+      let end = i;
+      while (end < sql.length && /[+\-*/%=<>!&|^~]/.test(sql[end])) end++;
+      tokens.push(`<span class="op-val">${esc(sql.slice(i, end))}</span>`);
+      i = end; continue;
+    }
+    if (/[(),.;]/.test(sql[i])) {
+      tokens.push(`<span class="punctuation-val">${esc(sql[i])}</span>`);
+      i++; continue;
+    }
     tokens.push(esc(sql[i]));
     i++;
   }
@@ -211,6 +241,30 @@ const gutter = document.getElementById('editor-gutter');
 const autocompleteDropdown = document.getElementById('autocomplete-dropdown');
 let autocompleteSelectedIndex = -1;
 let autocompleteItems = [];
+
+// --- Syntax Highlighting Overlay Synchronizer ---
+const highlightEl = document.getElementById('editor-highlight');
+function updateHighlight() {
+  if (!highlightEl || !editor) return;
+  highlightEl.innerHTML = highlightSQL(editor.value) + '\n';
+  highlightEl.scrollTop = editor.scrollTop;
+  highlightEl.scrollLeft = editor.scrollLeft;
+}
+
+if (editor) {
+  const originalValueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+  const originalValueGetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').get;
+  Object.defineProperty(editor, 'value', {
+    get() {
+      return originalValueGetter.call(this);
+    },
+    set(val) {
+      originalValueSetter.call(this, val);
+      updateHighlight();
+    },
+    configurable: true
+  });
+}
 
 function updateGutter() {
   const gutterEl = gutter || document.getElementById('editor-gutter');
@@ -379,6 +433,7 @@ editor.addEventListener('input', () => {
     editor.selectionEnd = end;
   }
   
+  updateHighlight();
   updateGutter();
   const items = getAutocompleteItems(editor.value, editor.selectionStart);
   showAutocomplete(items, editor.value, editor.selectionStart);
@@ -430,7 +485,13 @@ function updateAutocompleteSelection() {
 
 editor.addEventListener('click', updateGutter);
 editor.addEventListener('keyup', updateGutter);
-editor.addEventListener('scroll', () => { gutter.scrollTop = editor.scrollTop; });
+editor.addEventListener('scroll', () => {
+  gutter.scrollTop = editor.scrollTop;
+  if (highlightEl) {
+    highlightEl.scrollTop = editor.scrollTop;
+    highlightEl.scrollLeft = editor.scrollLeft;
+  }
+});
 document.addEventListener('click', (e) => {
   if (!autocompleteDropdown.contains(e.target) && e.target !== editor) {
     autocompleteDropdown.style.display = 'none';

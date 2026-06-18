@@ -118,8 +118,11 @@ export default function Home() {
 
       <div class="editor-container" id="editor-container">
         <div class="editor-gutter" id="editor-gutter"></div>
-        <textarea id="sql-editor" class="sql-editor" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"
-          placeholder="-- Write your SQL here...&#10;SELECT * FROM employees WHERE department = 'Engineering';"></textarea>
+        <div class="editor-area-wrapper">
+          <pre id="editor-highlight" class="sql-highlight-overlay" aria-hidden="true"></pre>
+          <textarea id="sql-editor" class="sql-editor" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"
+            placeholder="-- Write your SQL here...&#10;SELECT * FROM employees WHERE department = 'Engineering';"></textarea>
+        </div>
         <div class="autocomplete-dropdown" id="autocomplete-dropdown"></div>
       </div>
       <div class="editor-status-bar">
