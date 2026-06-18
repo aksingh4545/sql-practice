@@ -2013,6 +2013,80 @@ class SQLEngine {
     return false;
   }
 
+  selectToString(query) {
+    if (!query) return '';
+    let parts = ['SELECT'];
+    if (query.distinct) parts.push('DISTINCT');
+    
+    // Columns
+    if (query.columns && query.columns.length > 0) {
+      parts.push(query.columns.map(c => this.colToString(c)).join(', '));
+    } else {
+      parts.push('*');
+    }
+    
+    // FROM
+    if (query.from) {
+      parts.push('FROM');
+      if (query.from.type === 'subquery') {
+        parts.push(`(${this.selectToString(query.from.query)})`);
+      } else {
+        parts.push(query.from.name);
+      }
+      if (query.from.alias) {
+        parts.push('AS', query.from.alias);
+      }
+    }
+    
+    // JOINs
+    if (query.joins && query.joins.length > 0) {
+      for (const j of query.joins) {
+        parts.push(`${j.joinType || 'INNER'} JOIN`);
+        if (j.table.type === 'subquery') {
+          parts.push(`(${this.selectToString(j.table.query)})`);
+        } else {
+          parts.push(j.table.name);
+        }
+        if (j.table.alias) {
+          parts.push('AS', j.table.alias);
+        }
+        if (j.on) {
+          parts.push('ON', this.exprToString(j.on));
+        }
+      }
+    }
+    
+    // WHERE
+    if (query.where) {
+      parts.push('WHERE', this.exprToString(query.where));
+    }
+    
+    // GROUP BY
+    if (query.groupBy && query.groupBy.length > 0) {
+      parts.push('GROUP BY', query.groupBy.map(g => this.exprToString(g)).join(', '));
+    }
+    
+    // HAVING
+    if (query.having) {
+      parts.push('HAVING', this.exprToString(query.having));
+    }
+    
+    // ORDER BY
+    if (query.orderBy && query.orderBy.length > 0) {
+      parts.push('ORDER BY', query.orderBy.map(o => `${this.exprToString(o.expr)} ${o.dir}`).join(', '));
+    }
+    
+    // LIMIT / OFFSET
+    if (query.limit !== null && query.limit !== undefined) {
+      parts.push('LIMIT', this.exprToString(query.limit));
+    }
+    if (query.offset !== null && query.offset !== undefined) {
+      parts.push('OFFSET', this.exprToString(query.offset));
+    }
+    
+    return parts.join(' ');
+  }
+
   exprToString(expr) {
     if (!expr) return '';
     if (typeof expr !== 'object') return String(expr);
@@ -2030,7 +2104,29 @@ class SQLEngine {
       case 'is_null': return `${this.exprToString(expr.expr)} IS ${expr.not ? 'NOT ' : ''}NULL`;
       case 'like': return `${this.exprToString(expr.expr)} ${expr.not ? 'NOT ' : ''}LIKE ${this.exprToString(expr.pattern)}`;
       case 'between': return `${this.exprToString(expr.expr)} ${expr.not ? 'NOT ' : ''}BETWEEN ${this.exprToString(expr.low)} AND ${this.exprToString(expr.high)}`;
-      case 'in': return `${this.exprToString(expr.expr)} ${expr.not ? 'NOT ' : ''}IN (...)`;
+      case 'in': {
+        const op = expr.not ? 'NOT IN' : 'IN';
+        if (expr.subquery) {
+          return `${this.exprToString(expr.expr)} ${op} (${this.selectToString(expr.subquery)})`;
+        } else if (expr.list) {
+          return `${this.exprToString(expr.expr)} ${op} (${expr.list.map(e => this.exprToString(e)).join(', ')})`;
+        }
+        return `${this.exprToString(expr.expr)} ${op} (...)`;
+      }
+      case 'subquery': return `(${this.selectToString(expr.query)})`;
+      case 'exists': return `EXISTS (${this.selectToString(expr.query)})`;
+      case 'case': {
+        let parts = ['CASE'];
+        if (expr.operand) parts.push(this.exprToString(expr.operand));
+        for (const w of expr.whens) {
+          parts.push('WHEN', this.exprToString(w.cond), 'THEN', this.exprToString(w.result));
+        }
+        if (expr.elseExpr) {
+          parts.push('ELSE', this.exprToString(expr.elseExpr));
+        }
+        parts.push('END');
+        return parts.join(' ');
+      }
       default: return JSON.stringify(expr);
     }
   }

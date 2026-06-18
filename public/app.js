@@ -1300,9 +1300,27 @@ function renderERDiagram() {
   const ctx = canvas.getContext('2d');
   const tables = Object.values(State.db.tables);
 
-  canvas.width = container.offsetWidth || 400;
-  canvas.height = Math.max(300, tables.length * 120);
+  const tableW = 180;
+  const maxTableH = Math.max(...tables.map(t => 30 + t.columns.length * 20));
+  
+  const displayWidth = container.offsetWidth || 400;
+  const spacing = 40;
+  const cols = Math.floor((displayWidth - 20) / (tableW + spacing)) || 1;
+  const gridW = cols * tableW + (cols - 1) * spacing;
+  const startX = Math.max(20, (displayWidth - gridW) / 2);
+  
+  const numRows = Math.ceil(tables.length / cols);
+  const displayHeight = Math.max(320, numRows * (maxTableH + 60) + 40);
+
+  // High-DPI (Retina) support
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = displayWidth * dpr;
+  canvas.height = displayHeight * dpr;
+  canvas.style.width = displayWidth + 'px';
+  canvas.style.height = displayHeight + 'px';
+  
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.scale(dpr, dpr);
 
   const themeStyle = getComputedStyle(document.documentElement);
   const getCSSVar = (name, fallback) => themeStyle.getPropertyValue(name).trim() || fallback;
@@ -1317,84 +1335,128 @@ function renderERDiagram() {
 
   // Layout tables in a grid
   const positions = {};
-  const tableW = 150, tableH = 30 + tables[0]?.columns.length * 20 || 80;
-  const cols = Math.floor(canvas.width / (tableW + 40));
 
   tables.forEach((table, i) => {
     const col = i % cols;
     const row = Math.floor(i / cols);
     positions[table.name] = {
-      x: col * (tableW + 60) + 30,
-      y: row * (tableH + 60) + 30
+      x: startX + col * (tableW + spacing),
+      y: row * (maxTableH + 60) + 30
     };
   });
 
-  // Draw relationship lines first
-  ctx.strokeStyle = accentCyan + '44';
-  ctx.lineWidth = 1.5;
+  // Draw table boxes first
+  for (const table of tables) {
+    const pos = positions[table.name];
+    const h = 30 + table.columns.length * 20;
+
+    // Outer shadow for table card
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.15)';
+    ctx.shadowBlur = 8;
+    ctx.shadowOffsetY = 4;
+
+    // Card background & border
+    ctx.fillStyle = bgCard;
+    ctx.strokeStyle = borderPrimary;
+    ctx.lineWidth = 1.5;
+    roundRect(ctx, pos.x, pos.y, tableW, h, 8);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+
+    // Header gradient
+    const grad = ctx.createLinearGradient(pos.x, pos.y, pos.x + tableW, pos.y);
+    grad.addColorStop(0, accentBlue);
+    grad.addColorStop(1, accentCyan);
+    ctx.fillStyle = grad;
+    roundRect(ctx, pos.x, pos.y, tableW, 26, 8, true, false);
+    ctx.fill();
+
+    // Table name text
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 11px JetBrains Mono, monospace, sans-serif';
+    ctx.fillText(table.name.toUpperCase(), pos.x + 10, pos.y + 17);
+
+    // Columns
+    table.columns.forEach((col, ci) => {
+      const cy = pos.y + 30 + ci * 20;
+
+      // Subtle zebra striping
+      if (ci % 2 === 1) {
+        ctx.fillStyle = accentBlue + '0a'; // 4% opacity tint
+        ctx.fillRect(pos.x + 1, cy, tableW - 2, 20);
+      }
+
+      // Key badges and name
+      ctx.fillStyle = col.primaryKey ? accentYellow : textSecondary;
+      ctx.font = col.primaryKey ? 'bold 10px JetBrains Mono, monospace' : '10px JetBrains Mono, monospace';
+
+      let keyBadge = '';
+      if (col.primaryKey) keyBadge = '🔑 ';
+      else if (col.foreignKey) keyBadge = '🔗 ';
+      else keyBadge = '  ';
+
+      ctx.fillText(keyBadge + col.name, pos.x + 8, cy + 14);
+
+      // Column data type on the right
+      ctx.fillStyle = accentPurple;
+      ctx.font = 'italic 9px JetBrains Mono, monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText(col.type.toLowerCase(), pos.x + tableW - 10, cy + 14);
+      ctx.textAlign = 'left'; // Reset
+    });
+  }
+
+  // Draw relationship lines on top of borders
+  ctx.save();
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.2)';
+  ctx.shadowBlur = 4;
+  ctx.shadowOffsetY = 2;
+  ctx.strokeStyle = accentCyan;
+  ctx.lineWidth = 2;
+
   for (const table of tables) {
     for (const col of table.columns) {
       if (col.foreignKey && positions[col.foreignKey.table]) {
         const from = positions[table.name];
         const to = positions[col.foreignKey.table];
-        const fx = from.x + tableW;
-        const fy = from.y + 20;
-        const tx = to.x;
-        const ty = to.y + 20;
+
+        // Find from-column and to-column indices
+        const fromColIndex = table.columns.findIndex(c => c.name === col.name);
+        const targetTable = State.db.tables[col.foreignKey.table];
+        const toColIndex = targetTable ? targetTable.columns.findIndex(c => c.primaryKey) : 0;
+
+        const fy = from.y + 30 + (fromColIndex !== -1 ? fromColIndex : 0) * 20 + 10;
+        const ty = to.y + 30 + (toColIndex !== -1 ? toColIndex : 0) * 20 + 10;
+
+        const rightToLeft = to.x < from.x;
+        const fx = rightToLeft ? from.x : from.x + tableW;
+        const tx = rightToLeft ? to.x + tableW : to.x;
+
         ctx.beginPath();
         ctx.moveTo(fx, fy);
-        ctx.bezierCurveTo(fx + 40, fy, tx - 40, ty, tx, ty);
+        const cp1x = fx + (rightToLeft ? -40 : 40);
+        const cp2x = tx - (rightToLeft ? -40 : 40);
+        ctx.bezierCurveTo(cp1x, fy, cp2x, ty, tx, ty);
         ctx.stroke();
+
         // Arrowhead
         ctx.fillStyle = accentCyan;
         ctx.beginPath();
         ctx.moveTo(tx, ty);
-        ctx.lineTo(tx - 8, ty - 4);
-        ctx.lineTo(tx - 8, ty + 4);
+        if (rightToLeft) {
+          ctx.lineTo(tx + 8, ty - 4);
+          ctx.lineTo(tx + 8, ty + 4);
+        } else {
+          ctx.lineTo(tx - 8, ty - 4);
+          ctx.lineTo(tx - 8, ty + 4);
+        }
         ctx.fill();
       }
     }
   }
-
-  // Draw table boxes
-  for (const table of tables) {
-    const pos = positions[table.name];
-    const h = 30 + table.columns.length * 20;
-
-    // Shadow
-    ctx.shadowColor = accentBlue + '22';
-    ctx.shadowBlur = 10;
-
-    // Box
-    ctx.fillStyle = bgCard;
-    ctx.strokeStyle = borderPrimary;
-    ctx.lineWidth = 1;
-    roundRect(ctx, pos.x, pos.y, tableW, h, 6);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.shadowBlur = 0;
-
-    // Header
-    ctx.fillStyle = accentBlue + '22';
-    roundRect(ctx, pos.x, pos.y, tableW, 24, 6, true, false);
-    ctx.fill();
-
-    // Table name
-    ctx.fillStyle = accentBlue;
-    ctx.font = 'bold 11px JetBrains Mono, monospace';
-    ctx.fillText(table.name, pos.x + 8, pos.y + 16);
-
-    // Columns
-    table.columns.forEach((col, ci) => {
-      const cy = pos.y + 30 + ci * 20;
-      ctx.fillStyle = col.primaryKey ? accentYellow : textSecondary;
-      ctx.font = '10px JetBrains Mono, monospace';
-      ctx.fillText((col.primaryKey ? '🔑 ' : col.foreignKey ? '🔗 ' : '') + col.name, pos.x + 8, cy + 13);
-      ctx.fillStyle = accentPurple;
-      ctx.fillText(col.type, pos.x + tableW - 45, cy + 13);
-    });
-  }
+  ctx.restore();
 }
 
 function roundRect(ctx, x, y, w, h, r, topOnly = false, bottomOnly = false) {
@@ -1908,49 +1970,7 @@ const PRACTICE_QUESTIONS = [
   { id:100, level:8, levelName:'Advanced Challenges', table:'students', difficulty:'Expert',
     question:'Return the top-performing student in every subject.',
     hint:'Correlated subquery or RANK() PARTITION BY subject.',
-    starterQuery:'SELECT * FROM (\n  SELECT *, RANK() OVER (PARTITION BY subject ORDER BY score DESC) AS rnk\n  FROM students\n) t WHERE rnk = 1;' },
-
-  // ── LEVEL 9: Expert Interview Questions ──
-  { id:101, level:9, levelName:'Expert Interview', table:'employees', difficulty:'Expert',
-    question:'Write the query for the 3rd highest salary.',
-    hint:'DENSE_RANK() = 3 or LIMIT 1 OFFSET 2 on sorted salary.',
-    starterQuery:'SELECT DISTINCT salary FROM (\n  SELECT salary, DENSE_RANK() OVER (ORDER BY salary DESC) AS rnk\n  FROM employees\n) t WHERE rnk = 3;' },
-  { id:102, level:9, levelName:'Expert Interview', table:'employees', difficulty:'Expert',
-    question:'Find employees earning more than all employees in Marketing.',
-    hint:'WHERE salary > ALL (SELECT salary FROM ... WHERE dept = Marketing).',
-    starterQuery:"SELECT * FROM employees\nWHERE salary > ALL (SELECT salary FROM employees WHERE department = 'Marketing');" },
-  { id:103, level:9, levelName:'Expert Interview', table:'employees', difficulty:'Expert',
-    question:'Find duplicate salaries.',
-    hint:'GROUP BY salary HAVING COUNT(*) > 1.',
-    starterQuery:'SELECT salary, COUNT(*) AS occurrences\nFROM employees\nGROUP BY salary HAVING COUNT(*) > 1;' },
-  { id:104, level:9, levelName:'Expert Interview', table:'employees', difficulty:'Expert',
-    question:'Find departments with the same average salary.',
-    hint:'Self-join on AVG salary grouped by department.',
-    starterQuery:'SELECT a.department, b.department, a.avg_sal\nFROM (SELECT department, AVG(salary) AS avg_sal FROM employees GROUP BY department) a\nJOIN (SELECT department, AVG(salary) AS avg_sal FROM employees GROUP BY department) b\n  ON a.avg_sal = b.avg_sal AND a.department < b.department;' },
-  { id:105, level:9, levelName:'Expert Interview', table:'employees', difficulty:'Expert',
-    question:'Find gaps in employee IDs.',
-    hint:'Self join where id+1 not in employee ids.',
-    starterQuery:'SELECT e.id + 1 AS gap_start\nFROM employees e\nWHERE NOT EXISTS (SELECT 1 FROM employees WHERE id = e.id + 1)\nAND e.id < (SELECT MAX(id) FROM employees);' },
-  { id:106, level:9, levelName:'Expert Interview', table:'students', difficulty:'Expert',
-    question:'Find consecutive students with grade A.',
-    hint:'Self join on consecutive IDs where both have grade A.',
-    starterQuery:"SELECT s1.name AS student1, s2.name AS student2\nFROM students s1 JOIN students s2 ON s1.id + 1 = s2.id\nWHERE s1.grade = 'A' AND s2.grade = 'A';" },
-  { id:107, level:9, levelName:'Expert Interview', table:'students', difficulty:'Expert',
-    question:'Pivot student subjects into columns (show score per subject).',
-    hint:'Use CASE WHEN subject = X THEN score END aggregated.',
-    starterQuery:"SELECT name,\n  MAX(CASE WHEN subject = 'Math' THEN score END) AS Math,\n  MAX(CASE WHEN subject = 'Science' THEN score END) AS Science,\n  MAX(CASE WHEN subject = 'English' THEN score END) AS English\nFROM students GROUP BY name;" },
-  { id:108, level:9, levelName:'Expert Interview', table:'products', difficulty:'Expert',
-    question:'Find top product by stock in each category.',
-    hint:'RANK() OVER (PARTITION BY category ORDER BY stock DESC) = 1.',
-    starterQuery:'SELECT * FROM (\n  SELECT *, RANK() OVER (PARTITION BY category ORDER BY stock DESC) AS rnk\n  FROM products\n) t WHERE rnk = 1;' },
-  { id:109, level:9, levelName:'Expert Interview', table:'employees', difficulty:'Expert',
-    question:'Calculate median employee salary.',
-    hint:'Use PERCENTILE concept or middle row(s) with LIMIT OFFSET.',
-    starterQuery:'SELECT AVG(salary) AS median_salary FROM (\n  SELECT salary FROM employees ORDER BY salary\n  LIMIT 2 - (SELECT COUNT(*) FROM employees) % 2\n  OFFSET ((SELECT COUNT(*) FROM employees) - 1) / 2\n) t;' },
-  { id:110, level:9, levelName:'Expert Interview', table:'employees', difficulty:'Expert',
-    question:'Find employees whose salary is in the top 20% of all salaries.',
-    hint:'WHERE salary >= 80th percentile value.',
-    starterQuery:'SELECT * FROM employees\nWHERE salary >= (\n  SELECT salary FROM employees ORDER BY salary DESC\n  LIMIT 1 OFFSET (SELECT COUNT(*)/5 FROM employees)\n);' },
+    starterQuery:'SELECT * FROM (\n  SELECT *, RANK() OVER (PARTITION BY subject ORDER BY score DESC) AS rnk\n  FROM students\n) t WHERE rnk = 1;' }
 ];
 
 // Level metadata
@@ -1962,8 +1982,7 @@ const PRACTICE_LEVELS = [
   { level:5, name:'Subqueries',          icon:'🔍', desc:'Nested queries and correlated subqueries',             difficulty:'Advanced' },
   { level:6, name:'Self Joins',          icon:'🔄', desc:'Join a table with itself for hierarchical data',       difficulty:'Advanced' },
   { level:7, name:'Window Functions',    icon:'🪟', desc:'RANK, DENSE_RANK, ROW_NUMBER, running totals',         difficulty:'Advanced' },
-  { level:8, name:'Advanced Challenges', icon:'🚀', desc:'Complex multi-table and analytical queries',           difficulty:'Expert' },
-  { level:9, name:'Expert Interview',    icon:'🎓', desc:'Real interview questions — gaps, pivots, medians',     difficulty:'Expert' },
+  { level:8, name:'Advanced Challenges', icon:'🚀', desc:'Complex multi-table and analytical queries',           difficulty:'Expert' }
 ];
 
 // Practice state
@@ -2094,11 +2113,14 @@ function markQuestionSolved(id) {
 function updatePracticeProgress() {
   const solved = getPracticeSolved();
   const count = solved.size;
-  const pct = Math.round((count / 110) * 100);
+  const total = PRACTICE_QUESTIONS.length;
+  const pct = Math.round((count / total) * 100);
   const el = document.getElementById('practice-solved-count');
   const bar = document.getElementById('practice-progress-bar');
   if (el) el.textContent = count;
   if (bar) bar.style.width = pct + '%';
+  const totalEl = document.getElementById('practice-total-count');
+  if (totalEl) totalEl.textContent = total;
 }
 
 function updatePracticeSidebarCounts() {
@@ -2321,25 +2343,14 @@ window.saveConfigToDatabase = function() {
   };
   
   clearTimeout(saveDebounceTimer);
-  saveDebounceTimer = setTimeout(async () => {
+  saveDebounceTimer = setTimeout(() => {
     try {
-      const res = await fetch('/api/config', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(data)
-      });
-      if (res.ok) {
-        const resData = await res.json();
-        if (statusEl) {
-          statusEl.textContent = resData.storage === 'fallback' ? 'Saved locally (fallback)' : 'Saved to database';
-        }
-      } else {
-        if (statusEl) statusEl.textContent = 'Error saving';
+      localStorage.setItem('sqlvis_config', JSON.stringify(data));
+      if (statusEl) {
+        statusEl.textContent = 'Saved locally';
       }
     } catch (err) {
-      console.error('Error saving config:', err);
+      console.error('Error saving config to localStorage:', err);
       if (statusEl) statusEl.textContent = 'Error saving';
     }
   }, 400);
@@ -2347,9 +2358,9 @@ window.saveConfigToDatabase = function() {
 
 window.loadConfigFromDatabase = async function() {
   try {
-    const res = await fetch('/api/config');
-    if (res.ok) {
-      const data = await res.json();
+    const raw = localStorage.getItem('sqlvis_config');
+    if (raw) {
+      const data = JSON.parse(raw);
       practiceState.levelColors = data.levelColors || {};
       practiceState.questionColors = data.questionColors || {};
       
@@ -2364,11 +2375,16 @@ window.loadConfigFromDatabase = async function() {
       
       const statusEl = document.getElementById('notes-status');
       if (statusEl) {
-        statusEl.textContent = data.storage === 'fallback' ? 'Saved locally' : 'Saved to database';
+        statusEl.textContent = 'Loaded locally';
+      }
+    } else {
+      const statusEl = document.getElementById('notes-status');
+      if (statusEl) {
+        statusEl.textContent = 'Ready';
       }
     }
   } catch (err) {
-    console.error('Error loading config:', err);
+    console.error('Error loading config from localStorage:', err);
   }
 };
 
@@ -2379,8 +2395,29 @@ window.tryQuestion = function(id) {
   // Set active question for solved-tracking
   practiceState.activeQuestionId = id;
 
+  // Format comments to fit nicely within 60 chars per line
+  const wrapText = (text, limit = 60) => {
+    const words = text.split(' ');
+    const lines = [];
+    let curLine = '';
+    for (const w of words) {
+      if ((curLine + ' ' + w).length > limit) {
+        if (curLine) lines.push(curLine);
+        curLine = w;
+      } else {
+        curLine = curLine ? curLine + ' ' + w : w;
+      }
+    }
+    if (curLine) lines.push(curLine);
+    return lines.map(l => `-- ${l}`).join('\n');
+  };
+
+  const header = `🎯 Challenge Q${q.id} · Level ${q.level}: ${q.levelName}`;
+  const headerComment = wrapText(header, 60);
+  const questionComment = wrapText(q.question, 60);
+
   // Build the editor content: question as comment on top, then query
-  const commentBlock = `-- 🎯 Challenge Q${q.id} · Level ${q.level}: ${q.levelName}\n-- ${q.question}\n\n`;
+  const commentBlock = `${headerComment}\n${questionComment}\n\n`;
   const editorEl = document.getElementById('sql-editor');
   if (editorEl) {
     editorEl.value = commentBlock;
@@ -2624,6 +2661,47 @@ function initSQLVisApp() {
       }
     });
   }
+
+  // Handle window resizing for the ER diagram
+  window.addEventListener('resize', () => {
+    const erContainer = document.getElementById('schema-er');
+    if (erContainer && erContainer.style.display !== 'none') {
+      renderERDiagram();
+    }
+  });
+
+  // Initialize theme from localStorage
+  const savedTheme = localStorage.getItem('sqlvis_theme') || 'light';
+  const themeToggleBtn = document.getElementById('btn-theme-toggle');
+  if (savedTheme === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    if (themeToggleBtn) themeToggleBtn.textContent = '☀️';
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+    if (themeToggleBtn) themeToggleBtn.textContent = '🌙';
+  }
+
+  // Hook theme toggle button listener
+  if (themeToggleBtn) {
+    themeToggleBtn.addEventListener('click', () => {
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      if (isDark) {
+        document.documentElement.removeAttribute('data-theme');
+        localStorage.setItem('sqlvis_theme', 'light');
+        themeToggleBtn.textContent = '🌙';
+      } else {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        localStorage.setItem('sqlvis_theme', 'dark');
+        themeToggleBtn.textContent = '☀️';
+      }
+      
+      // Redraw ER diagram instantly to update colors
+      const erContainer = document.getElementById('schema-er');
+      if (erContainer && erContainer.style.display !== 'none') {
+        setTimeout(renderERDiagram, 100);
+      }
+    });
+  }
 }
 
 if (document.readyState === 'loading') {
@@ -2652,9 +2730,6 @@ document.addEventListener('click', function(e) {
 const LEARN_TOPICS = [
   { icon: '🔍', title: 'SELECT Basics', desc: 'Choose columns and filter data', query: 'SELECT name, salary FROM employees WHERE salary > 80000;' },
   { icon: '⚖️', title: 'LEFT vs RIGHT JOIN', desc: 'Compare left vs right joins and see unmatched rows in real-time', query: '-- LEFT JOIN keeps unmatched rows from left table (employees)\nSELECT e.name, d.name AS dept\nFROM employees e\nLEFT JOIN departments d ON e.department_id = d.id;', badge: 'badge-blue', badgeText: 'Visual Guide' },
-  { icon: '🎙️', title: 'Interview Q: 2nd Highest Salary', desc: 'Find the second highest unique salary in the company', query: '-- Find the 2nd highest unique salary\nSELECT DISTINCT salary \nFROM employees \nORDER BY salary DESC \nLIMIT 1 OFFSET 1;', badge: 'badge-purple', badgeText: 'Interview Prep' },
-  { icon: '🎙️', title: 'Interview Q: Find Duplicates', desc: 'Find departments with duplicate employee assignments', query: '-- Find departments with duplicate employee counts\nSELECT department, COUNT(*) AS employee_count\nFROM employees\nGROUP BY department\nHAVING COUNT(*) > 1;', badge: 'badge-purple', badgeText: 'Interview Prep' },
-  { icon: '🎙️', title: 'Interview Q: Highest Paid in Dept', desc: 'Find the highest paid employee in each department', query: '-- Find the highest paid employee in each department\nSELECT name, department, salary\nFROM employees e1\nWHERE salary = (\n  SELECT MAX(salary)\n  FROM employees e2\n  WHERE e2.department = e1.department\n);', badge: 'badge-purple', badgeText: 'Interview Prep' },
   { icon: '⋈', title: 'JOINs Explained', desc: 'Combine data from multiple tables', query: 'SELECT e.name, d.name as dept FROM employees e INNER JOIN departments d ON e.department_id = d.id;' },
   { icon: '⊕', title: 'GROUP BY & Aggregates', desc: 'Summarize data with COUNT, SUM, AVG', query: 'SELECT department, COUNT(*) as cnt, AVG(salary) as avg_sal FROM employees GROUP BY department HAVING COUNT(*) > 1 ORDER BY avg_sal DESC;' },
   { icon: '🪟', title: 'Window Functions', desc: 'Rank, number rows, calculate running totals', query: 'SELECT name, salary, department, RANK() OVER (PARTITION BY department ORDER BY salary DESC) as dept_rank, SUM(salary) OVER (PARTITION BY department ORDER BY salary) as running_total FROM employees;' },
@@ -2671,22 +2746,6 @@ function renderLearnContent() {
   
   // Render core topics
   const coreHTML = LEARN_TOPICS.map((t, i) => {
-    if (t.badgeText === 'Interview Prep') return '';
-    return `
-      <div class="learn-card" onclick="loadLearnTopic(${i})">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-          <div class="learn-card-icon">${t.icon}</div>
-          ${t.badge ? `<span class="badge ${t.badge}" style="font-size:9.5px; padding: 2px 6px; border-radius: 12px; font-weight: 550;">${t.badgeText}</span>` : ''}
-        </div>
-        <div class="learn-card-title">${esc(t.title)}</div>
-        <div class="learn-card-desc">${esc(t.desc)}</div>
-      </div>
-    `;
-  }).join('');
-
-  // Render interview prep topics
-  const interviewHTML = LEARN_TOPICS.map((t, i) => {
-    if (t.badgeText !== 'Interview Prep') return '';
     return `
       <div class="learn-card" onclick="loadLearnTopic(${i})">
         <div style="display:flex; justify-content:space-between; align-items:flex-start;">
@@ -2707,13 +2766,6 @@ function renderLearnContent() {
     </h3>
     <div class="learn-grid" style="margin-bottom: 24px;">
       ${coreHTML}
-    </div>
-    
-    <h3 style="color:var(--accent-purple); font-size:14px; margin: 24px 0 12px 0; border-bottom:1px solid var(--border-secondary); padding-bottom:8px; display:flex; align-items:center; gap:8px; font-weight: 700;">
-      <span>🎙️</span> SQL Interview Questions
-    </h3>
-    <div class="learn-grid">
-      ${interviewHTML}
     </div>
   `;
 }
@@ -2999,9 +3051,15 @@ function setupResize(handleId, targetId) {
   });
 
   document.addEventListener('mouseup', () => {
-    isResizing = false;
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
+    if (isResizing) {
+      isResizing = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      const erContainer = document.getElementById('schema-er');
+      if (erContainer && erContainer.style.display !== 'none') {
+        renderERDiagram();
+      }
+    }
   });
 }
 
@@ -3327,15 +3385,7 @@ const DEFAULT_QUERY = `-- 🎉 Welcome to SQLVis — Interactive SQL Learning!
 -- Try typing a query or use the templates button (⊞)
 -- Press Ctrl+Enter or click "Run Query" to execute
 
-SELECT 
-  e.name,
-  e.department,
-  e.salary,
-  d.location,
-  RANK() OVER (PARTITION BY e.department ORDER BY e.salary DESC) AS dept_rank
-FROM employees e
-INNER JOIN departments d ON e.department_id = d.id
-ORDER BY e.department, dept_rank;`;
+SELECT * FROM employees;`;
 
 // ─────────────────────────────────────────────
 // LLM INTEGRATION (AI TUTOR & QUESTS)

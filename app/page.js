@@ -42,7 +42,6 @@ export default function Home() {
         <button class="nav-tab" data-tab="learn" id="btab-learn">Learn</button>
         <button class="nav-tab" data-tab="leaderboard" id="tab-leaderboard">Leaderboard</button>
       </div>
-    </div>
     <div class="nav-right">
       <div class="xp-badge" id="xp-badge">
         <span class="xp-icon">✦</span>
@@ -51,6 +50,9 @@ export default function Home() {
       <div class="level-badge" id="level-badge">
         <span>Lv.</span><span id="level-num">1</span>
       </div>
+      <button class="icon-btn theme-toggle-btn" id="btn-theme-toggle" title="Toggle Theme" style="font-size: 15px; margin-right: 8px; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--bg-tertiary); border: 1px solid var(--border-primary); color: var(--text-primary); cursor: pointer; padding: 0;">
+        🌙
+      </button>
       <div class="dialect-selector">
         <select id="dialect-select">
           <option value="sqlite">SQLite</option>
@@ -326,7 +328,7 @@ export default function Home() {
       <div class="bottom-pane" id="pane-notes">
         <div class="notes-container">
           <div class="notes-header">
-            <span class="notes-status" id="notes-status">Saved to database</span>
+            <span class="notes-status" id="notes-status">Saved locally</span>
             <button class="notes-btn" id="btn-clear-notes" title="Clear notes">✕ Clear Notes</button>
           </div>
           <textarea class="notes-textarea" id="notes-textarea" placeholder="Type your personal SQL notes, queries, or thoughts here..."></textarea>
@@ -345,7 +347,7 @@ export default function Home() {
         </div>
         <div class="chal-modal-meta">
           <div class="chal-global-progress">
-            <span class="chal-progress-text"><span id="practice-solved-count">0</span> / 110 solved</span>
+            <span class="chal-progress-text"><span id="practice-solved-count">0</span> / <span id="practice-total-count">100</span> solved</span>
             <div class="chal-progress-track">
               <div class="chal-progress-bar" id="practice-progress-bar" style="width:0%"></div>
             </div>
