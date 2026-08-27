@@ -39,6 +39,7 @@ export default function Home() {
       <div class="nav-tabs">
         <button class="nav-tab active" data-tab="editor" id="tab-editor">Editor</button>
         <button class="nav-tab" data-tab="challenges" id="tab-challenges">Challenges</button>
+        <button class="nav-tab" data-tab="interview" id="tab-interview">💼 Interview Qs</button>
         <button class="nav-tab" data-tab="learn" id="btab-learn">Learn</button>
         <button class="nav-tab" data-tab="leaderboard" id="tab-leaderboard">Leaderboard</button>
       </div>

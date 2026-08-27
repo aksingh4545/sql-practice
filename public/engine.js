@@ -177,7 +177,11 @@ class InMemoryDB {
 
   getTable(name) {
     const lname = name.toLowerCase();
-    const t = this.tables[lname];
+    let t = this.tables[lname];
+    if (!t) {
+      if (lname.endsWith('s')) t = this.tables[lname.slice(0, -1)];
+      else t = this.tables[lname + 's'];
+    }
     if (!t) {
       // Check views
       if (this.views[lname]) return this.views[lname];
@@ -244,8 +248,8 @@ class InMemoryDB {
 // ─────────────────────────────────────────────
 class ExprEvaluator {
   constructor(db, row, context = {}) {
-    this.db = db;
-    this.row = row;
+    this.db = db || (typeof State !== 'undefined' ? State.db : null);
+    this.row = row || {};
     this.context = context;
   }
 
@@ -306,7 +310,17 @@ class ExprEvaluator {
 
       case 'in': {
         const val = this.eval(expr.expr);
-        const list = expr.list.map(e => this.eval(e));
+        let list = [];
+        if (expr.subquery) {
+          const engine = new SQLEngine(this.db);
+          const result = expr.subquery.type === 'SELECT'
+            ? engine.executeSelect(expr.subquery, this.context.cteContext || {})
+            : engine.execute(expr.subquery);
+          const firstKey = result.rows.length > 0 ? Object.keys(result.rows[0]).find(k => !k.startsWith('_')) : null;
+          list = firstKey ? result.rows.map(r => r[firstKey]) : [];
+        } else if (expr.list) {
+          list = expr.list.map(e => this.eval(e));
+        }
         const found = list.includes(val);
         return expr.not ? !found : found;
       }
@@ -335,7 +349,9 @@ class ExprEvaluator {
 
       case 'subquery': {
         const engine = new SQLEngine(this.db);
-        const result = engine.execute(expr.query);
+        const result = expr.query.type === 'SELECT'
+          ? engine.executeSelect(expr.query, this.context.cteContext || {})
+          : engine.execute(expr.query);
         if (expr.existsCheck) return result.rows.length > 0;
         if (result.rows.length === 0) return null;
         const firstKey = Object.keys(result.rows[0]).find(k => !k.startsWith('_'));
@@ -387,6 +403,15 @@ class ExprEvaluator {
         if (this.context._aggregating) {
           const rows = this.context._rows || [];
           if (args[0] && args[0].type === 'star') return rows.length;
+          if (expr.distinct) {
+            const set = new Set();
+            for (const r of rows) {
+              const ev = new ExprEvaluator(this.db, r, {});
+              const v = ev.eval(args[0]);
+              if (v !== null && v !== undefined) set.add(v);
+            }
+            return set.size;
+          }
           return rows.filter(r => {
             const ev = new ExprEvaluator(this.db, r, {});
             return ev.eval(args[0]) !== null;
@@ -429,6 +454,78 @@ class ExprEvaluator {
         }
         return this.context['MAX'] ?? null;
       }
+      case 'PERCENTILE_CONT': {
+        if (this.context._aggregating) {
+          const rows = this.context._rows || [];
+          const pct = this.eval(args[0]) ?? 0.5;
+          const orderExpr = args[1] || args[0];
+          const vals = rows.map(r => {
+            const ev = new ExprEvaluator(this.db, r, {});
+            return ev.eval(orderExpr);
+          }).filter(v => v !== null && !isNaN(v)).sort((a, b) => a - b);
+          if (vals.length === 0) return null;
+          const idx = (vals.length - 1) * pct;
+          const lower = Math.floor(idx);
+          const upper = Math.ceil(idx);
+          if (lower === upper) return vals[lower];
+          return vals[lower] + (vals[upper] - vals[lower]) * (idx - lower);
+        }
+        return this.context['PERCENTILE_CONT'] ?? null;
+      }
+      case 'YEAR': {
+        const val = this.eval(args[0]);
+        if (!val) return null;
+        const d = new Date(val);
+        return isNaN(d.getFullYear()) ? parseInt(String(val).split('-')[0]) || null : d.getFullYear();
+      }
+      case 'DATENAME': {
+        const part = String(this.eval(args[0]) || args[0]?.value || '').toUpperCase();
+        const val = this.eval(args[1]);
+        if (!val) return null;
+        const d = new Date(val);
+        if (part === 'WEEKDAY' || part === 'DW') {
+          const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+          return days[d.getDay()];
+        }
+        if (part === 'MONTH' || part === 'M') {
+          const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+          return months[d.getMonth()];
+        }
+        return String(d.getFullYear());
+      }
+      case 'FORMAT': {
+        const val = this.eval(args[0]);
+        const fmt = String(this.eval(args[1]) || '').toLowerCase();
+        if (!val) return null;
+        const s = String(val);
+        if (fmt === 'yyyy-mm') return s.slice(0, 7);
+        if (fmt === 'yyyy') return s.slice(0, 4);
+        return s;
+      }
+      case 'DATEDIFF': {
+        const unit = String(this.eval(args[0]) || args[0]?.value || '').toUpperCase();
+        const d1Str = this.eval(args[1]);
+        const d2Str = this.eval(args[2]);
+        if (!d1Str || !d2Str) return null;
+        const d1 = new Date(d1Str);
+        const d2 = new Date(d2Str);
+        const diffMs = d2 - d1;
+        if (unit === 'DAY' || unit === 'DD' || unit === 'D') return Math.round(diffMs / (1000 * 60 * 60 * 24));
+        if (unit === 'MONTH' || unit === 'MM' || unit === 'M') return (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth());
+        if (unit === 'YEAR' || unit === 'YY' || unit === 'YYYY') return d2.getFullYear() - d1.getFullYear();
+        return Math.round(diffMs / (1000 * 60 * 60 * 24));
+      }
+      case 'DATEADD': {
+        const unit = String(this.eval(args[0]) || args[0]?.value || '').toUpperCase();
+        const num = this.eval(args[1]) || 0;
+        const dateStr = this.eval(args[2]);
+        const d = dateStr ? new Date(dateStr) : new Date();
+        if (unit === 'MONTH' || unit === 'MM' || unit === 'M') d.setMonth(d.getMonth() + num);
+        else if (unit === 'DAY' || unit === 'DD' || unit === 'D') d.setDate(d.getDate() + num);
+        else if (unit === 'YEAR' || unit === 'YY' || unit === 'YYYY') d.setFullYear(d.getFullYear() + num);
+        return d.toISOString().split('T')[0];
+      }
+      case 'GETDATE': return new Date().toISOString().split('T')[0];
       case 'COALESCE': case 'IFNULL': case 'NVL': {
         for (const a of args) {
           const v = this.eval(a);
@@ -540,6 +637,12 @@ class SQLParser {
     const ctes = [];
     do {
       const name = this.consume().value;
+      if (this.peek()?.type === 'LPAREN' && !this.isKeyword('AS', 1)) {
+        this.consume();
+        do { this.consume(); } while (this.consumeIf('COMMA'));
+        this.expect('RPAREN');
+      }
+      this.consumeIf('KEYWORD', 'AS');
       this.expect('LPAREN');
       const query = this.parseSelect();
       this.expect('RPAREN');
@@ -552,8 +655,13 @@ class SQLParser {
   parseSelect() {
     this.expect('KEYWORD', 'SELECT');
     const distinct = !!this.consumeIf('KEYWORD', 'DISTINCT');
+    let top = null;
+    if (this.isKeyword('TOP')) {
+      this.consume();
+      top = this.parseExpr();
+    }
     const columns = this.parseSelectList();
-    let from = null, joins = [], where = null, groupBy = [], having = null, orderBy = [], limit = null, offset = null;
+    let from = null, joins = [], where = null, groupBy = [], having = null, orderBy = [], limit = top, offset = null;
 
     if (this.isKeyword('FROM')) {
       this.consume();
@@ -634,7 +742,8 @@ class SQLParser {
     const joins = [];
     while (true) {
       let joinType = null;
-      if (this.isKeyword('JOIN')) { joinType = 'INNER JOIN'; this.consume(); }
+      if (this.peek()?.type === 'COMMA') { this.consume(); joinType = 'CROSS JOIN'; }
+      else if (this.isKeyword('JOIN')) { joinType = 'INNER JOIN'; this.consume(); }
       else if (this.isKeyword('INNER') && this.isKeyword('JOIN', 1)) { this.consume(); this.consume(); joinType = 'INNER JOIN'; }
       else if (this.isKeyword('LEFT')) {
         this.consume();
@@ -1098,6 +1207,18 @@ class SQLParser {
           do { args.push(this.parseExpr()); } while (this.consumeIf('COMMA'));
         }
         this.expect('RPAREN');
+        if (this.isKeyword('WITHIN')) {
+          this.consume();
+          this.expect('KEYWORD', 'GROUP');
+          this.expect('LPAREN');
+          this.expect('KEYWORD', 'ORDER');
+          this.expect('KEYWORD', 'BY');
+          const orderExpr = this.parseExpr();
+          this.consumeIf('KEYWORD', 'ASC');
+          this.consumeIf('KEYWORD', 'DESC');
+          this.expect('RPAREN');
+          args.push(orderExpr);
+        }
         return { type: 'function', name: name.toUpperCase(), args, distinct };
       }
 
@@ -1256,7 +1377,7 @@ class SQLEngine {
       const filtered = [];
       const rejected = [];
       for (const row of rows) {
-        const ev = new ExprEvaluator(this.db, row, {});
+        const ev = new ExprEvaluator(this.db, row, { cteContext });
         if (ev.eval(ast.where)) filtered.push(row);
         else rejected.push(row);
       }
@@ -1290,7 +1411,7 @@ class SQLEngine {
       const beforeGroups = { ...groups };
       const filtered = {};
       for (const [key, groupRows] of Object.entries(groups)) {
-        const ctx = { _aggregating: true, _rows: groupRows };
+        const ctx = { _aggregating: true, _rows: groupRows, cteContext };
         const rep = groupRows[0] || {};
         const ev = new ExprEvaluator(this.db, rep, ctx);
         if (ev.eval(ast.having)) filtered[key] = groupRows;
@@ -1776,7 +1897,7 @@ class SQLEngine {
     const cteContext = {};
     for (const cte of ast.ctes) {
       const engine = new SQLEngine(this.db);
-      const result = engine.execute(cte.query);
+      const result = cte.query.type === 'SELECT' ? engine.executeSelect(cte.query, cteContext) : engine.execute(cte.query);
       cteContext[cte.name.toLowerCase()] = result.rows;
       this.addStep({
         clause: 'CTE',

@@ -24,6 +24,7 @@ const State = {
   completedChallenges: new Set(),
   activeChallenge: null
 };
+if (typeof window !== 'undefined') window.State = State;
 
 // ─────────────────────────────────────────────
 // SAMPLE DATABASE
@@ -34,6 +35,7 @@ function initSampleDB() {
   // Departments
   db.createTable('departments', [
     { name: 'id', type: 'INTEGER', primaryKey: true, autoIncrement: true },
+    { name: 'department_id', type: 'INTEGER' },
     { name: 'name', type: 'TEXT', notNull: true },
     { name: 'budget', type: 'REAL' },
     { name: 'location', type: 'TEXT' }
@@ -42,9 +44,10 @@ function initSampleDB() {
   // Employees
   db.createTable('employees', [
     { name: 'id', type: 'INTEGER', primaryKey: true, autoIncrement: true },
+    { name: 'employee_id', type: 'INTEGER' },
     { name: 'name', type: 'TEXT', notNull: true },
     { name: 'department', type: 'TEXT' },
-    { name: 'department_id', type: 'INTEGER', foreignKey: { table: 'departments', column: 'id' } },
+    { name: 'department_id', type: 'INTEGER' },
     { name: 'salary', type: 'REAL' },
     { name: 'hire_date', type: 'TEXT' },
     { name: 'email', type: 'TEXT' },
@@ -54,6 +57,7 @@ function initSampleDB() {
   // Products
   db.createTable('products', [
     { name: 'id', type: 'INTEGER', primaryKey: true, autoIncrement: true },
+    { name: 'product_id', type: 'INTEGER' },
     { name: 'name', type: 'TEXT', notNull: true },
     { name: 'category', type: 'TEXT' },
     { name: 'price', type: 'REAL' },
@@ -61,15 +65,55 @@ function initSampleDB() {
     { name: 'supplier_id', type: 'INTEGER' }
   ]);
 
+  // Sales
+  db.createTable('sales', [
+    { name: 'id', type: 'INTEGER', primaryKey: true, autoIncrement: true },
+    { name: 'product_id', type: 'INTEGER' },
+    { name: 'quantity', type: 'INTEGER' },
+    { name: 'price', type: 'REAL' },
+    { name: 'sale_date', type: 'TEXT' }
+  ]);
+
+  // Customers
+  db.createTable('customers', [
+    { name: 'id', type: 'INTEGER', primaryKey: true, autoIncrement: true },
+    { name: 'customer_id', type: 'INTEGER' },
+    { name: 'name', type: 'TEXT' },
+    { name: 'email', type: 'TEXT' },
+    { name: 'join_date', type: 'TEXT' }
+  ]);
+
   // Orders
   db.createTable('orders', [
     { name: 'id', type: 'INTEGER', primaryKey: true, autoIncrement: true },
+    { name: 'order_id', type: 'INTEGER' },
+    { name: 'customer_id', type: 'INTEGER' },
     { name: 'customer_name', type: 'TEXT' },
-    { name: 'product_id', type: 'INTEGER', foreignKey: { table: 'products', column: 'id' } },
+    { name: 'product_id', type: 'INTEGER' },
     { name: 'quantity', type: 'INTEGER' },
-    { name: 'total_price', type: 'REAL' },
+    { name: 'total_amount', type: 'REAL' },
+    { name: 'amount', type: 'REAL' },
     { name: 'order_date', type: 'TEXT' },
+    { name: 'date', type: 'TEXT' },
+    { name: 'region', type: 'TEXT' },
     { name: 'status', type: 'TEXT' }
+  ]);
+
+  // Returns
+  db.createTable('returns', [
+    { name: 'id', type: 'INTEGER', primaryKey: true, autoIncrement: true },
+    { name: 'return_id', type: 'INTEGER' },
+    { name: 'customer_id', type: 'INTEGER' },
+    { name: 'order_id', type: 'INTEGER' },
+    { name: 'return_date', type: 'TEXT' }
+  ]);
+
+  // your_table (for duplicate records Q1)
+  db.createTable('your_table', [
+    { name: 'id', type: 'INTEGER', primaryKey: true, autoIncrement: true },
+    { name: 'column1', type: 'TEXT' },
+    { name: 'column2', type: 'TEXT' },
+    { name: 'value', type: 'INTEGER' }
   ]);
 
   // Students
@@ -83,53 +127,100 @@ function initSampleDB() {
 
   // Insert departments
   const depts = [
-    { name: 'Engineering', budget: 1200000, location: 'San Francisco' },
-    { name: 'Marketing', budget: 600000, location: 'New York' },
-    { name: 'Sales', budget: 800000, location: 'Chicago' },
-    { name: 'HR', budget: 300000, location: 'Austin' },
-    { name: 'Finance', budget: 500000, location: 'Boston' }
+    { department_id: 1, name: 'Engineering', budget: 1200000, location: 'San Francisco' },
+    { department_id: 2, name: 'Marketing', budget: 600000, location: 'New York' },
+    { department_id: 3, name: 'Sales', budget: 800000, location: 'Chicago' },
+    { department_id: 4, name: 'HR', budget: 300000, location: 'Austin' },
+    { department_id: 5, name: 'Finance', budget: 500000, location: 'Boston' }
   ];
   depts.forEach(d => db.insert('departments', d));
 
   // Insert employees
   const emps = [
-    { name: 'Alice Johnson', department: 'Engineering', department_id: 1, salary: 120000, hire_date: '2021-03-15', email: 'alice@company.com', manager_id: null },
-    { name: 'Bob Smith', department: 'Engineering', department_id: 1, salary: 95000, hire_date: '2020-07-22', email: 'bob@company.com', manager_id: 1 },
-    { name: 'Carol White', department: 'Marketing', department_id: 2, salary: 75000, hire_date: '2022-01-10', email: 'carol@company.com', manager_id: null },
-    { name: 'David Lee', department: 'Sales', department_id: 3, salary: 85000, hire_date: '2019-11-05', email: 'david@company.com', manager_id: null },
-    { name: 'Eve Martinez', department: 'Engineering', department_id: 1, salary: 110000, hire_date: '2021-08-30', email: 'eve@company.com', manager_id: 1 },
-    { name: 'Frank Brown', department: 'HR', department_id: 4, salary: 65000, hire_date: '2023-02-14', email: 'frank@company.com', manager_id: null },
-    { name: 'Grace Davis', department: 'Marketing', department_id: 2, salary: 80000, hire_date: '2022-06-18', email: 'grace@company.com', manager_id: 3 },
-    { name: 'Henry Wilson', department: 'Finance', department_id: 5, salary: 90000, hire_date: '2020-09-01', email: 'henry@company.com', manager_id: null },
-    { name: 'Iris Taylor', department: 'Sales', department_id: 3, salary: 72000, hire_date: '2023-04-25', email: 'iris@company.com', manager_id: 4 },
-    { name: 'Jack Anderson', department: 'Engineering', department_id: 1, salary: 105000, hire_date: '2021-12-07', email: 'jack@company.com', manager_id: 1 }
+    { employee_id: 101, name: 'Alice Johnson', department: 'Engineering', department_id: 1, salary: 120000, hire_date: '2021-03-15', email: 'alice@company.com', manager_id: null },
+    { employee_id: 102, name: 'Bob Smith', department: 'Engineering', department_id: 1, salary: 95000, hire_date: '2020-07-22', email: 'bob@company.com', manager_id: 101 },
+    { employee_id: 103, name: 'Carol White', department: 'Marketing', department_id: 2, salary: 75000, hire_date: '2022-01-10', email: 'carol@company.com', manager_id: null },
+    { employee_id: 104, name: 'David Lee', department: 'Sales', department_id: 3, salary: 85000, hire_date: '2019-11-05', email: 'david@company.com', manager_id: null },
+    { employee_id: 105, name: 'Eve Martinez', department: 'Engineering', department_id: 1, salary: 110000, hire_date: '2021-08-30', email: 'eve@company.com', manager_id: 101 },
+    { employee_id: 106, name: 'Frank Brown', department: 'HR', department_id: 4, salary: 65000, hire_date: '2023-02-14', email: 'frank@company.com', manager_id: null },
+    { employee_id: 107, name: 'Grace Davis', department: 'Marketing', department_id: 2, salary: 80000, hire_date: '2023-06-10', email: 'grace@company.com', manager_id: 103 },
+    { employee_id: 108, name: 'Henry Wilson', department: 'Finance', department_id: 5, salary: 90000, hire_date: '2023-09-17', email: 'henry@company.com', manager_id: null },
+    { employee_id: 109, name: 'Ian Malcolm', department: 'Contractor', department_id: 99, salary: 98000, hire_date: '2023-11-20', email: 'ian@company.com', manager_id: null }
   ];
   emps.forEach(e => db.insert('employees', e));
 
   // Insert products
   const prods = [
-    { name: 'Laptop Pro', category: 'Electronics', price: 1299.99, stock: 45, supplier_id: 1 },
-    { name: 'Wireless Mouse', category: 'Electronics', price: 49.99, stock: 200, supplier_id: 1 },
-    { name: 'Standing Desk', category: 'Furniture', price: 599.99, stock: 30, supplier_id: 2 },
-    { name: 'Monitor 4K', category: 'Electronics', price: 799.99, stock: 60, supplier_id: 1 },
-    { name: 'Office Chair', category: 'Furniture', price: 449.99, stock: 25, supplier_id: 2 },
-    { name: 'Keyboard', category: 'Electronics', price: 129.99, stock: 150, supplier_id: 3 },
-    { name: 'Webcam HD', category: 'Electronics', price: 89.99, stock: 80, supplier_id: 3 },
-    { name: 'Desk Lamp', category: 'Furniture', price: 79.99, stock: 100, supplier_id: 2 }
+    { product_id: 1, name: 'Laptop Pro', category: 'Electronics', price: 1200, stock: 45, supplier_id: 1 },
+    { product_id: 2, name: 'Smartphone X', category: 'Electronics', price: 800, stock: 120, supplier_id: 1 },
+    { product_id: 3, name: 'Wireless Headphones', category: 'Accessories', price: 150, stock: 200, supplier_id: 2 },
+    { product_id: 4, name: '4K Monitor', category: 'Electronics', price: 350, stock: 30, supplier_id: 1 },
+    { product_id: 5, name: 'Ergonomic Desk Chair', category: 'Furniture', price: 250, stock: 15, supplier_id: 3 }
   ];
   prods.forEach(p => db.insert('products', p));
 
+  // Insert sales
+  const salesData = [
+    { product_id: 1, quantity: 5, price: 1200, sale_date: '2023-01-15' },
+    { product_id: 1, quantity: 3, price: 1200, sale_date: '2023-03-20' },
+    { product_id: 2, quantity: 10, price: 800, sale_date: '2023-02-10' },
+    { product_id: 2, quantity: 4, price: 800, sale_date: '2023-05-12' },
+    { product_id: 3, quantity: 15, price: 150, sale_date: '2023-04-05' },
+    { product_id: 4, quantity: 2, price: 350, sale_date: '2023-06-18' }
+  ];
+  salesData.forEach(s => db.insert('sales', s));
+
+  // Insert customers
+  const custs = [
+    { customer_id: 101, name: 'John Doe', email: 'john@example.com', join_date: '2022-01-10' },
+    { customer_id: 102, name: 'Jane Smith', email: 'jane@example.com', join_date: '2022-03-15' },
+    { customer_id: 103, name: 'Robert Brown', email: 'robert@example.com', join_date: '2022-05-20' },
+    { customer_id: 104, name: 'Emily Davis', email: 'emily@example.com', join_date: '2022-08-01' },
+    { customer_id: 105, name: 'Michael Wilson', email: 'michael@example.com', join_date: '2021-11-10' },
+    { customer_id: 106, name: 'Sarah Connor', email: 'sarah@example.com', join_date: '2023-01-05' }
+  ];
+  custs.forEach(c => db.insert('customers', c));
+
   // Insert orders
   const orders = [
-    { customer_name: 'Tech Corp', product_id: 1, quantity: 5, total_price: 6499.95, order_date: '2024-01-15', status: 'delivered' },
-    { customer_name: 'StartUp Inc', product_id: 2, quantity: 20, total_price: 999.80, order_date: '2024-01-20', status: 'delivered' },
-    { customer_name: 'Global LLC', product_id: 3, quantity: 8, total_price: 4799.92, order_date: '2024-02-01', status: 'pending' },
-    { customer_name: 'Tech Corp', product_id: 4, quantity: 3, total_price: 2399.97, order_date: '2024-02-10', status: 'shipped' },
-    { customer_name: 'DataSys', product_id: 1, quantity: 10, total_price: 12999.90, order_date: '2024-02-15', status: 'delivered' },
-    { customer_name: 'StartUp Inc', product_id: 6, quantity: 15, total_price: 1949.85, order_date: '2024-03-01', status: 'pending' },
-    { customer_name: 'Global LLC', product_id: 5, quantity: 4, total_price: 1799.96, order_date: '2024-03-10', status: 'delivered' }
+    { order_id: 1, customer_id: 101, customer_name: 'John Doe', product_id: 1, quantity: 2, total_amount: 2400, amount: 2400, order_date: '2023-01-10', date: '2023-01-10', region: 'North', status: 'delivered' },
+    { order_id: 2, customer_id: 101, customer_name: 'John Doe', product_id: 2, quantity: 1, total_amount: 800, amount: 800, order_date: '2023-02-15', date: '2023-02-15', region: 'North', status: 'delivered' },
+    { order_id: 3, customer_id: 101, customer_name: 'John Doe', product_id: 3, quantity: 2, total_amount: 300, amount: 300, order_date: '2023-03-10', date: '2023-03-10', region: 'East', status: 'delivered' },
+    { order_id: 4, customer_id: 101, customer_name: 'John Doe', product_id: 4, quantity: 1, total_amount: 350, amount: 350, order_date: '2023-03-11', date: '2023-03-11', region: 'East', status: 'delivered' },
+    { order_id: 5, customer_id: 101, customer_name: 'John Doe', product_id: 1, quantity: 1, total_amount: 1200, amount: 1200, order_date: '2023-04-05', date: '2023-04-05', region: 'North', status: 'delivered' },
+    { order_id: 6, customer_id: 101, customer_name: 'John Doe', product_id: 2, quantity: 2, total_amount: 1600, amount: 1600, order_date: '2023-05-18', date: '2023-05-18', region: 'West', status: 'delivered' },
+    { order_id: 7, customer_id: 101, customer_name: 'John Doe', product_id: 3, quantity: 4, total_amount: 600, amount: 600, order_date: '2023-06-20', date: '2023-06-20', region: 'West', status: 'delivered' },
+    { order_id: 8, customer_id: 101, customer_name: 'John Doe', product_id: 4, quantity: 2, total_amount: 700, amount: 700, order_date: '2023-07-14', date: '2023-07-14', region: 'South', status: 'delivered' },
+    { order_id: 9, customer_id: 101, customer_name: 'John Doe', product_id: 1, quantity: 1, total_amount: 1200, amount: 1200, order_date: '2023-08-22', date: '2023-08-22', region: 'South', status: 'delivered' },
+    { order_id: 10, customer_id: 101, customer_name: 'John Doe', product_id: 2, quantity: 1, total_amount: 800, amount: 800, order_date: '2023-09-19', date: '2023-09-19', region: 'North', status: 'delivered' },
+    { order_id: 11, customer_id: 101, customer_name: 'John Doe', product_id: 3, quantity: 3, total_amount: 450, amount: 450, order_date: '2023-10-15', date: '2023-10-15', region: 'North', status: 'delivered' },
+    { order_id: 12, customer_id: 101, customer_name: 'John Doe', product_id: 4, quantity: 1, total_amount: 350, amount: 350, order_date: '2023-11-11', date: '2023-11-11', region: 'East', status: 'delivered' },
+    { order_id: 13, customer_id: 101, customer_name: 'John Doe', product_id: 1, quantity: 2, total_amount: 2400, amount: 2400, order_date: '2023-12-05', date: '2023-12-05', region: 'East', status: 'delivered' },
+    { order_id: 14, customer_id: 102, customer_name: 'Jane Smith', product_id: 2, quantity: 1, total_amount: 800, amount: 800, order_date: '2023-01-20', date: '2023-01-20', region: 'West', status: 'delivered' },
+    { order_id: 15, customer_id: 102, customer_name: 'Jane Smith', product_id: 3, quantity: 2, total_amount: 300, amount: 300, order_date: '2023-04-10', date: '2023-04-10', region: 'West', status: 'delivered' },
+    { order_id: 16, customer_id: 103, customer_name: 'Robert Brown', product_id: 1, quantity: 1, total_amount: 1200, amount: 1200, order_date: '2023-02-12', date: '2023-02-12', region: 'South', status: 'delivered' },
+    { order_id: 17, customer_id: 104, customer_name: 'Emily Davis', product_id: 4, quantity: 2, total_amount: 700, amount: 700, order_date: '2023-03-01', date: '2023-03-01', region: 'North', status: 'delivered' },
+    { order_id: 18, customer_id: 105, customer_name: 'Michael Wilson', product_id: 2, quantity: 1, total_amount: 800, amount: 800, order_date: '2022-05-10', date: '2022-05-10', region: 'South', status: 'delivered' },
+    { order_id: 19, customer_id: 106, customer_name: 'Sarah Connor', product_id: 3, quantity: 1, total_amount: 150, amount: 150, order_date: '2023-11-20', date: '2023-11-20', region: 'East', status: 'delivered' }
   ];
   orders.forEach(o => db.insert('orders', o));
+
+  // Insert returns
+  const rets = [
+    { return_id: 1, customer_id: 102, order_id: 14, return_date: '2023-02-01' },
+    { return_id: 2, customer_id: 104, order_id: 17, return_date: '2023-03-15' }
+  ];
+  rets.forEach(r => db.insert('returns', r));
+
+  // Insert your_table
+  const yourData = [
+    { column1: 'A', column2: 'X', value: 10 },
+    { column1: 'A', column2: 'X', value: 20 },
+    { column1: 'B', column2: 'Y', value: 30 },
+    { column1: 'C', column2: 'Z', value: 40 },
+    { column1: 'C', column2: 'Z', value: 50 }
+  ];
+  yourData.forEach(y => db.insert('your_table', y));
 
   // Insert students
   const students = [
@@ -2031,8 +2122,173 @@ const PRACTICE_QUESTIONS = [
   { id:100, level:8, levelName:'Advanced Challenges', table:'students', difficulty:'Expert',
     question:'Return the top-performing student in every subject.',
     hint:'Correlated subquery or RANK() PARTITION BY subject.',
-    starterQuery:'SELECT * FROM (\n  SELECT *, RANK() OVER (PARTITION BY subject ORDER BY score DESC) AS rnk\n  FROM students\n) t WHERE rnk = 1;' }
+    starterQuery:'SELECT * FROM (\n  SELECT *, RANK() OVER (PARTITION BY subject ORDER BY score DESC) AS rnk\n  FROM students\n) t WHERE rnk = 1;' },
+
+  // ── LEVEL 9: Top Company Interview Questions (Facebook, Deloitte, Amazon) ──
+  { id:101, level:9, levelName:'SQL Interview Questions', table:'orders', difficulty:'Interview', company:['facebook', 'deloitte', 'amazon'],
+    question:'1. Find duplicate order records having the same customer_id and product_id from the orders table',
+    hint:'Group by customer_id and product_id, then filter using HAVING COUNT(*) > 1.',
+    starterQuery:`SELECT customer_id, product_id, COUNT(*) AS dup_count\nFROM orders\nGROUP BY customer_id, product_id\nHAVING COUNT(*) > 1;` },
+  { id:102, level:9, levelName:'SQL Interview Questions', table:'employees', difficulty:'Interview', company:['facebook', 'amazon'],
+    question:'2. Retrieve the second highest salary from the employees table',
+    hint:'Use MAX(salary) with a subquery filtering out the absolute maximum salary.',
+    starterQuery:`SELECT MAX(salary) AS SecondHighestSalary\nFROM employees\nWHERE salary < (SELECT MAX(salary) FROM employees);` },
+  { id:103, level:9, levelName:'SQL Interview Questions', table:'employees', difficulty:'Interview', company:['deloitte', 'amazon'],
+    question:'3. Find employees without department (Left Join usage)',
+    hint:'Perform a LEFT JOIN between employees and departments and filter WHERE department_id IS NULL.',
+    starterQuery:`SELECT e.employee_id, e.name, e.department_id\nFROM employees e\nLEFT JOIN departments d\nON e.department_id = d.department_id\nWHERE d.department_id IS NULL;` },
+  { id:104, level:9, levelName:'SQL Interview Questions', table:'sales', difficulty:'Interview', company:['amazon'],
+    question:'4. Calculate the total revenue per product from the sales table',
+    hint:'SUM(quantity * price) aggregated per product_id.',
+    starterQuery:`SELECT product_id,\nSUM(quantity * price) AS total_revenue\nFROM sales\nGROUP BY product_id;` },
+  { id:105, level:9, levelName:'SQL Interview Questions', table:'employees', difficulty:'Interview', company:['facebook', 'amazon'],
+    question:'5. Get the top 3 highest-paid employees from the employees table',
+    hint:'Order by salary DESC and limit top 3.',
+    starterQuery:`SELECT TOP 3 employee_id, name, salary\nFROM employees\nORDER BY salary DESC;` },
+  { id:106, level:9, levelName:'SQL Interview Questions', table:'customers', difficulty:'Interview', company:['amazon', 'facebook'],
+    question:'6. Customers who made purchases but never returned products',
+    hint:'JOIN customers with orders and filter WHERE customer_id NOT IN (SELECT customer_id FROM returns).',
+    starterQuery:`SELECT DISTINCT c.customer_id, c.name\nFROM customers c\nJOIN orders o ON c.customer_id = o.customer_id\nWHERE c.customer_id NOT IN (\n  SELECT customer_id FROM returns\n);` },
+  { id:107, level:9, levelName:'SQL Interview Questions', table:'orders', difficulty:'Interview', company:['deloitte', 'amazon'],
+    question:'7. Show the count of orders per customer',
+    hint:'GROUP BY customer_id with COUNT(*).',
+    starterQuery:`SELECT customer_id,\nCOUNT(*) AS order_count\nFROM orders\nGROUP BY customer_id;` },
+  { id:108, level:9, levelName:'SQL Interview Questions', table:'employees', difficulty:'Interview', company:['facebook', 'deloitte'],
+    question:'8. Retrieve all employees who joined in 2023',
+    hint:'Extract year from hire_date using YEAR(hire_date) = 2023.',
+    starterQuery:`SELECT employee_id, name, hire_date\nFROM employees\nWHERE YEAR(hire_date) = 2023;` },
+  { id:109, level:9, levelName:'SQL Interview Questions', table:'orders', difficulty:'Interview', company:['amazon'],
+    question:'9. Calculate the average order value per customer',
+    hint:'GROUP BY customer_id and calculate AVG(total_amount).',
+    starterQuery:`SELECT customer_id,\nAVG(total_amount) AS avg_order_value\nFROM orders\nGROUP BY customer_id;` },
+  { id:110, level:9, levelName:'SQL Interview Questions', table:'orders', difficulty:'Interview', company:['amazon', 'facebook'],
+    question:'10. Get the latest order placed by each customer',
+    hint:'MAX(order_date) grouped by customer_id.',
+    starterQuery:`SELECT customer_id,\nMAX(order_date) AS latest_order_date\nFROM orders\nGROUP BY customer_id;` },
+  { id:111, level:9, levelName:'SQL Interview Questions', table:'products', difficulty:'Interview', company:['amazon'],
+    question:'11. Find products that were never sold',
+    hint:'LEFT JOIN products with sales and filter WHERE s.product_id IS NULL.',
+    starterQuery:`SELECT p.product_id, p.name\nFROM products p\nLEFT JOIN sales s\nON p.product_id = s.product_id\nWHERE s.product_id IS NULL;` },
+  { id:112, level:9, levelName:'SQL Interview Questions', table:'sales', difficulty:'Interview', company:['amazon', 'facebook'],
+    question:'12. Identify the most selling product by total quantity',
+    hint:'SUM(quantity) DESC limited to top 1.',
+    starterQuery:`SELECT TOP 1 product_id,\nSUM(quantity) AS total_qty\nFROM sales\nGROUP BY product_id\nORDER BY total_qty DESC;` },
+  { id:113, level:9, levelName:'SQL Interview Questions', table:'orders', difficulty:'Interview', company:['deloitte', 'amazon'],
+    question:'13. Get the total revenue and the number of orders per region',
+    hint:'SUM(total_amount) and COUNT(*) grouped by region.',
+    starterQuery:`SELECT region,\nSUM(total_amount) AS total_revenue,\nCOUNT(*) AS order_count\nFROM orders\nGROUP BY region;` },
+  { id:114, level:9, levelName:'SQL Interview Questions', table:'orders', difficulty:'Interview', company:['amazon', 'facebook'],
+    question:'14. Count how many customers placed more than 5 orders',
+    hint:'Use a subquery with GROUP BY customer_id HAVING COUNT(*) > 5.',
+    starterQuery:`SELECT COUNT(*) AS customer_count\nFROM (\n  SELECT customer_id FROM orders\n  GROUP BY customer_id\n  HAVING COUNT(*) > 5\n) AS subquery;` },
+  { id:115, level:9, levelName:'SQL Interview Questions', table:'orders', difficulty:'Interview', company:['facebook', 'deloitte'],
+    question:'15. Retrieve customers with orders above the average order value',
+    hint:'Filter WHERE total_amount > (SELECT AVG(total_amount) FROM orders).',
+    starterQuery:`SELECT customer_id, order_id, total_amount\nFROM orders\nWHERE total_amount > (\n  SELECT AVG(total_amount) FROM orders\n);` },
+  { id:116, level:9, levelName:'SQL Interview Questions', table:'employees', difficulty:'Interview', company:['deloitte', 'facebook'],
+    question:'16. Find all employees hired on weekends',
+    hint:"DATENAME(WEEKDAY, hire_date) IN ('Saturday', 'Sunday').",
+    starterQuery:`SELECT employee_id, name, hire_date\nFROM employees\nWHERE DATENAME(WEEKDAY, hire_date) IN ('Saturday', 'Sunday');` },
+  { id:117, level:9, levelName:'SQL Interview Questions', table:'employees', difficulty:'Interview', company:['deloitte'],
+    question:'17. Find all employees within salary range 70,000 to 110,000',
+    hint:'Filter WHERE salary BETWEEN 70000 AND 110000.',
+    starterQuery:`SELECT employee_id, name, salary\nFROM employees\nWHERE salary BETWEEN 70000 AND 110000;` },
+  { id:118, level:9, levelName:'SQL Interview Questions', table:'orders', difficulty:'Interview', company:['amazon', 'deloitte'],
+    question:'18. Get monthly sales revenue and order count',
+    hint:"FORMAT(order_date, 'yyyy-MM') grouped by month.",
+    starterQuery:`SELECT\nFORMAT(order_date, 'yyyy-MM') AS month,\nSUM(total_amount) AS total_revenue,\nCOUNT(id) AS order_count\nFROM orders\nGROUP BY FORMAT(order_date, 'yyyy-MM');` },
+  { id:119, level:9, levelName:'SQL Interview Questions', table:'employees', difficulty:'Interview', company:['facebook', 'amazon', 'deloitte'],
+    question:'19. Rank employees by salary within each department',
+    hint:'RANK() OVER (PARTITION BY department_id ORDER BY salary DESC).',
+    starterQuery:`SELECT employee_id, name, department_id, salary,\nRANK() OVER (PARTITION BY department_id ORDER BY salary DESC) AS salary_rk\nFROM employees;` },
+  { id:120, level:9, levelName:'SQL Interview Questions', table:'orders', difficulty:'Interview', company:['amazon', 'facebook'],
+    question:'20. Find customers who placed orders every month in 2023',
+    hint:"HAVING COUNT(DISTINCT FORMAT(order_date, 'yyyy-MM')) = 12.",
+    starterQuery:`SELECT customer_id\nFROM orders\nWHERE YEAR(order_date) = 2023\nGROUP BY customer_id\nHAVING COUNT(DISTINCT FORMAT(order_date, 'yyyy-MM')) = 12;` },
+  { id:121, level:9, levelName:'SQL Interview Questions', table:'orders', difficulty:'Interview', company:['facebook', 'amazon'],
+    question:'21. Find moving average of sales over the last 3 orders',
+    hint:'AVG(total_amount) OVER (ORDER BY order_date ROWS BETWEEN 2 PRECEDING AND CURRENT ROW).',
+    starterQuery:`SELECT order_date, total_amount,\nAVG(total_amount) OVER (ORDER BY order_date ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS moving_avg\nFROM orders;` },
+  { id:122, level:9, levelName:'SQL Interview Questions', table:'orders', difficulty:'Interview', company:['amazon', 'deloitte'],
+    question:'22. Identify the first and last order date for each customer',
+    hint:'MIN(order_date) and MAX(order_date) per customer_id.',
+    starterQuery:`SELECT customer_id,\nMIN(order_date) AS first_order,\nMAX(order_date) AS last_order\nFROM orders\nGROUP BY customer_id;` },
+  { id:123, level:9, levelName:'SQL Interview Questions', table:'sales', difficulty:'Interview', company:['facebook', 'amazon'],
+    question:'23. Show product sales distribution (percent of total revenue)',
+    hint:'CTE for TotalRevenue CROSS JOIN sales grouped by product.',
+    starterQuery:`WITH TotalRevenue AS (\n  SELECT SUM(quantity * price) AS total FROM sales\n)\nSELECT s.product_id,\nSUM(s.quantity * s.price) AS revenue,\nSUM(s.quantity * s.price) * 100.0 / t.total AS revenue_pct\nFROM sales s\nCROSS JOIN TotalRevenue t\nGROUP BY s.product_id, t.total;` },
+  { id:124, level:9, levelName:'SQL Interview Questions', table:'orders', difficulty:'Interview', company:['amazon', 'facebook'],
+    question:'24. Retrieve customers who made consecutive purchases (within 1 day)',
+    hint:'LAG(order_date) and DATEDIFF(DAY, prev_order_date, order_date) = 1.',
+    starterQuery:`WITH cte AS (\n  SELECT customer_id AS id, order_date,\n  LAG(order_date) OVER (PARTITION BY customer_id ORDER BY order_date) AS prev_order_date\n  FROM orders\n)\nSELECT id, order_date, prev_order_date\nFROM cte\nWHERE DATEDIFF(DAY, prev_order_date, order_date) = 1;` },
+  { id:125, level:9, levelName:'SQL Interview Questions', table:'orders', difficulty:'Interview', company:['amazon', 'facebook'],
+    question:'25. Find churned customers (no orders in the last 6 months)',
+    hint:'MAX(order_date) < DATEADD(MONTH, -6, GETDATE()).',
+    starterQuery:`SELECT customer_id\nFROM orders\nGROUP BY customer_id\nHAVING MAX(order_date) < DATEADD(MONTH, -6, GETDATE());` },
+  { id:126, level:9, levelName:'SQL Interview Questions', table:'orders', difficulty:'Interview', company:['facebook', 'amazon'],
+    question:'26. Calculate cumulative revenue by day',
+    hint:'SUM(total_amount) OVER (ORDER BY order_date).',
+    starterQuery:`SELECT order_date, total_amount,\nSUM(total_amount) OVER (ORDER BY order_date) AS cumulative_revenue\nFROM orders;` },
+  { id:127, level:9, levelName:'SQL Interview Questions', table:'employees', difficulty:'Interview', company:['deloitte', 'facebook'],
+    question:'27. Identify top-performing departments by average salary',
+    hint:'AVG(salary) grouped by department_id ORDER BY DESC.',
+    starterQuery:`SELECT department_id,\nAVG(salary) AS avg_salary\nFROM employees\nGROUP BY department_id\nORDER BY avg_salary DESC;` },
+  { id:128, level:9, levelName:'SQL Interview Questions', table:'orders', difficulty:'Interview', company:['amazon', 'deloitte'],
+    question:'28. Find customers who ordered more than the average number of orders per customer',
+    hint:'CTE for customer order counts, filter where count > AVG.',
+    starterQuery:`WITH customer_orders AS (\n  SELECT customer_id, COUNT(*) AS order_count\n  FROM orders\n  GROUP BY customer_id\n)\nSELECT customer_id, order_count\nFROM customer_orders\nWHERE order_count > (SELECT AVG(order_count) FROM customer_orders);` },
+  { id:129, level:9, levelName:'SQL Interview Questions', table:'orders', difficulty:'Interview', company:['amazon', 'facebook'],
+    question:'29. Calculate revenue generated from new customers (first-time orders)',
+    hint:'CTE for MIN(order_date) per customer joined with orders on order_date.',
+    starterQuery:`WITH first_orders AS (\n  SELECT customer_id, MIN(order_date) AS first_order_date\n  FROM orders\n  GROUP BY customer_id\n)\nSELECT SUM(o.total_amount) AS new_revenue\nFROM orders o\nJOIN first_orders f ON o.customer_id = f.customer_id\nWHERE o.order_date = f.first_order_date;` },
+  { id:130, level:9, levelName:'SQL Interview Questions', table:'employees', difficulty:'Interview', company:['deloitte', 'facebook'],
+    question:'30. Find the percentage of employees in each department',
+    hint:'COUNT(*) * 100.0 / (SELECT COUNT(*) FROM employees).',
+    starterQuery:`SELECT department_id,\nCOUNT(*) AS emp_count,\nCOUNT(*) * 100.0 / (SELECT COUNT(*) FROM employees) AS pct\nFROM employees\nGROUP BY department_id;` },
+  { id:131, level:9, levelName:'SQL Interview Questions', table:'employees', difficulty:'Interview', company:['deloitte'],
+    question:'31. Retrieve the maximum salary difference within each department',
+    hint:'MAX(salary) - MIN(salary) grouped by department_id.',
+    starterQuery:`SELECT department_id,\nMAX(salary) - MIN(salary) AS salary_diff\nFROM employees\nGROUP BY department_id;` },
+  { id:132, level:9, levelName:'SQL Interview Questions', table:'sales', difficulty:'Interview', company:['facebook', 'amazon'],
+    question:'32. Find products that contribute to 80% of the revenue (Pareto Principle)',
+    hint:'Running total via SUM() OVER () <= total * 0.8.',
+    starterQuery:`WITH sales_cte AS (\n  SELECT product_id, SUM(quantity * price) AS revenue\n  FROM sales\n  GROUP BY product_id\n),\ntotal_revenue AS (\n  SELECT SUM(revenue) AS total FROM sales_cte\n)\nSELECT s.product_id, s.revenue,\nSUM(s.revenue) OVER (ORDER BY s.revenue DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running_total\nFROM sales_cte s, total_revenue t\nWHERE SUM(s.revenue) OVER (ORDER BY s.revenue DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) <= t.total * 0.8;` },
+  { id:133, level:9, levelName:'SQL Interview Questions', table:'orders', difficulty:'Interview', company:['amazon', 'facebook'],
+    question:'33. Calculate average time between two purchases for each customer',
+    hint:'LAG(order_date) and AVG(DATEDIFF(DAY, prev_date, order_date)).',
+    starterQuery:`WITH cte AS (\n  SELECT customer_id, order_date,\n  LAG(order_date) OVER (PARTITION BY customer_id ORDER BY order_date) AS prev_date\n  FROM orders\n)\nSELECT customer_id,\nAVG(DATEDIFF(DAY, prev_date, order_date)) AS avg_gap_days\nFROM cte\nWHERE prev_date IS NOT NULL\nGROUP BY customer_id;` },
+  { id:134, level:9, levelName:'SQL Interview Questions', table:'orders', difficulty:'Interview', company:['amazon', 'deloitte'],
+    question:'34. Show last purchase for each customer along with order amount',
+    hint:'ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY order_date DESC) = 1.',
+    starterQuery:`WITH ranked_orders AS (\n  SELECT customer_id, id AS order_id, total_amount,\n  ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY order_date DESC) AS rn\n  FROM orders\n)\nSELECT customer_id, order_id, total_amount\nFROM ranked_orders\nWHERE rn = 1;` },
+  { id:135, level:9, levelName:'SQL Interview Questions', table:'orders', difficulty:'Interview', company:['facebook', 'amazon'],
+    question:'35. Calculate year-over-year growth in revenue',
+    hint:"SUM(total_amount) - LAG(SUM(total_amount)) OVER (ORDER BY FORMAT(order_date, 'yyyy')).",
+    starterQuery:`SELECT FORMAT(order_date, 'yyyy') AS year,\nSUM(total_amount) AS revenue,\nSUM(total_amount) - LAG(SUM(total_amount)) OVER (ORDER BY FORMAT(order_date, 'yyyy')) AS yoy_growth\nFROM orders\nGROUP BY FORMAT(order_date, 'yyyy');` },
+  { id:136, level:9, levelName:'SQL Interview Questions', table:'orders', difficulty:'Interview', company:['facebook', 'amazon'],
+    question:'36. Detect customers whose purchase amount is higher than 90th percentile',
+    hint:'NTILE(10) OVER (PARTITION BY customer_id ORDER BY total_amount) = 10.',
+    starterQuery:`WITH ranked_orders AS (\n  SELECT customer_id, id AS order_id, total_amount,\n  NTILE(10) OVER (PARTITION BY customer_id ORDER BY total_amount) AS decile\n  FROM orders\n)\nSELECT customer_id, order_id, total_amount\nFROM ranked_orders\nWHERE decile = 10;` },
+  { id:137, level:9, levelName:'SQL Interview Questions', table:'orders', difficulty:'Interview', company:['amazon', 'facebook'],
+    question:'37. Retrieve the longest gap between orders for each customer',
+    hint:'MAX(DATEDIFF(DAY, prev_order_date, order_date)) with LAG().',
+    starterQuery:`WITH cte AS (\n  SELECT customer_id, order_date,\n  LAG(order_date) OVER (PARTITION BY customer_id ORDER BY order_date) AS prev_order_date\n  FROM orders\n)\nSELECT customer_id,\nMAX(DATEDIFF(DAY, prev_order_date, order_date)) AS max_gap\nFROM cte\nWHERE prev_order_date IS NOT NULL\nGROUP BY customer_id;` },
+  { id:138, level:9, levelName:'SQL Interview Questions', table:'orders', difficulty:'Interview', company:['facebook', 'deloitte', 'amazon'],
+    question:'38. Identify customers with revenue below the 10th percentile',
+    hint:'Compare total_revenue against PERCENTILE_CONT(0.1) WITHIN GROUP.',
+    starterQuery:`WITH cte AS (\n  SELECT customer_id, SUM(total_amount) AS total_revenue\n  FROM orders\n  GROUP BY customer_id\n)\nSELECT customer_id, total_revenue\nFROM cte\nWHERE total_revenue < (\n  SELECT PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY total_revenue) FROM cte\n);` }
 ];
+
+// Helper function to render company logo badges for interview questions
+function renderCompanyBadges(companies) {
+  if (!companies || !companies.length) return '';
+  const map = {
+    facebook: `<span class="company-badge facebook" title="Facebook / Meta Interview Question"><svg class="company-logo-icon" viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg> Meta</span>`,
+    deloitte: `<span class="company-badge deloitte" title="Deloitte Interview Question"><svg class="company-logo-icon" viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><circle cx="12" cy="12" r="10"/><circle cx="17" cy="15" r="2.5" fill="#86BC25"/></svg> Deloitte</span>`,
+    amazon: `<span class="company-badge amazon" title="Amazon Interview Question"><svg class="company-logo-icon" viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M13.5 12.5c-.8.6-1.9.9-2.9.9-2.3 0-3.6-1.3-3.6-3.1 0-2.4 2-3.4 5.2-3.4v-.3c0-.8-.4-1.3-1.6-1.3-.9 0-1.7.3-2.3.7l-.5-1.2c.8-.5 2-1 3.4-1 2.3 0 3.2 1.2 3.2 3.1v4.7c0 .9.2 1.3.6 1.8l-1.3.8c-.3-.4-.5-1-.5-1.6zm-.2-4c-1.8 0-3.1.5-3.1 1.7 0 .8.5 1.4 1.5 1.4.9 0 1.6-.4 1.6-1.2v-1.9z"/><path d="M4 19.5c3.5 2 8.5 2.5 12.5.5.4-.2.8.2.5.5-2.2 2-6.5 3.5-10.5 2.5-1-.2-2.5-1.5-2.5-3.5z"/></svg> Amazon</span>`
+  };
+  return `<div class="company-badges">${companies.map(c => map[c] || '').join('')}</div>`;
+}
 
 // Level metadata
 const PRACTICE_LEVELS = [
@@ -2043,7 +2299,8 @@ const PRACTICE_LEVELS = [
   { level:5, name:'Subqueries',          icon:'🔍', desc:'Nested queries and correlated subqueries',             difficulty:'Advanced' },
   { level:6, name:'Self Joins',          icon:'🔄', desc:'Join a table with itself for hierarchical data',       difficulty:'Advanced' },
   { level:7, name:'Window Functions',    icon:'🪟', desc:'RANK, DENSE_RANK, ROW_NUMBER, running totals',         difficulty:'Advanced' },
-  { level:8, name:'Advanced Challenges', icon:'🚀', desc:'Complex multi-table and analytical queries',           difficulty:'Expert' }
+  { level:8, name:'Advanced Challenges', icon:'🚀', desc:'Complex multi-table and analytical queries',           difficulty:'Expert' },
+  { level:9, name:'SQL Interview Questions', icon:'💼', desc:'Real-world SQL interview questions asked by Facebook / Meta, Deloitte, and Amazon', difficulty:'Interview', companies:['facebook', 'deloitte', 'amazon'] }
 ];
 
 // Practice state
@@ -2239,6 +2496,15 @@ function renderPracticeModal() {
     }).join('');
 
     const divider = idx < PRACTICE_LEVELS.length - 1 ? '<hr class="chal-level-divider">' : '';
+    let companyBanner = '';
+    if (lvl.level === 9) {
+      companyBanner = `
+        <div class="interview-company-header">
+          <div class="interview-company-title">Top Tech & Financial Companies:</div>
+          ${renderCompanyBadges(['facebook', 'deloitte', 'amazon'])}
+        </div>
+      `;
+    }
 
     return `
       <div class="chal-level-section" id="chal-level-${lvl.level}">
@@ -2248,6 +2514,7 @@ function renderPracticeModal() {
           <span class="chal-level-diff-badge ${diffClass}">${esc(lvl.difficulty)}</span>
           <span class="chal-level-count">${solvedCount}/${qs.length} solved</span>
         </div>
+        ${companyBanner}
         <div class="chal-circles-grid">${circles}</div>
       </div>
       ${divider}`;
@@ -2473,15 +2740,24 @@ window.tryQuestion = function(id) {
     return lines.map(l => `-- ${l}`).join('\n');
   };
 
-  const header = `🎯 Challenge Q${q.id} · Level ${q.level}: ${q.levelName}`;
-  const headerComment = wrapText(header, 60);
-  const questionComment = wrapText(q.question, 60);
+  // Build clean comment block for SQL editor showing full question, table & schema
+  let tableSchemaInfo = '';
+  if (State.db && q.table) {
+    const tbl = State.db.getTable(q.table);
+    if (tbl && tbl.columns) {
+      const colNames = tbl.columns.map(c => c.name).join(', ');
+      tableSchemaInfo = `-- 📋 TABLE & SCHEMA:\n-- Table: ${q.table} (${colNames})\n-- DB Tables: employees, departments, products, sales, customers, orders, returns\n--\n`;
+    }
+  }
 
-  // Build the editor content: question as comment on top, then query
-  const commentBlock = `${headerComment}\n${questionComment}\n\n`;
+  const questionText = wrapText(q.question, 75);
+  const hintText = q.hint ? wrapText(q.hint, 75) + '\n' : '';
+
+  const fullCommentBlock = `-- 🎯 QUESTION:\n${questionText}\n--\n${tableSchemaInfo}-- 💡 HINT:\n${hintText}\n-- Write your SQL query here...\n`;
+
   const editorEl = document.getElementById('sql-editor');
   if (editorEl) {
-    editorEl.value = commentBlock;
+    editorEl.value = fullCommentBlock;
     if (typeof updateGutter === 'function') updateGutter();
   }
 
@@ -2496,7 +2772,7 @@ window.tryQuestion = function(id) {
   const textEl = document.getElementById('challenge-bar-text');
   if (bar) bar.style.display = 'flex';
   if (badgeEl) badgeEl.textContent = `Q${q.id} · Lv${q.level}`;
-  if (textEl) textEl.textContent = q.question;
+  if (textEl) textEl.innerHTML = `<span style="margin-right:8px">${esc(q.question)}</span>` + (q.company ? renderCompanyBadges(q.company) : '');
 
   // Reset hint panel
   const hintBar = document.getElementById('challenge-hint-bar');
@@ -2522,8 +2798,9 @@ window.tryQuestion = function(id) {
   if (explEl) {
     explEl.innerHTML = `
       <div style="background:#7c3aed11;border:1px solid #7c3aed33;border-radius:8px;padding:12px;margin-bottom:10px">
-        <div style="font-weight:700;color:var(--accent-purple);margin-bottom:4px">
-          🎯 Practice Q${q.id}: ${esc(q.question)}
+        <div style="font-weight:700;color:var(--accent-purple);margin-bottom:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span>🎯 Practice Q${q.id}: ${esc(q.question)}</span>
+          ${q.company ? renderCompanyBadges(q.company) : ''}
         </div>
         <div style="color:var(--text-secondary);font-size:11px">Table: <code>${esc(q.table)}</code> · Level ${q.level}: ${esc(q.levelName)}</div>
         <div style="color:var(--text-muted);font-size:11px;margin-top:6px">💡 Hint: ${esc(q.hint)}</div>
@@ -3170,6 +3447,13 @@ document.querySelectorAll('.nav-tab').forEach(tab => {
     if (name === 'challenges') {
       renderPracticeModal();
       document.getElementById('challenges-modal').style.display = 'flex';
+    } else if (name === 'interview') {
+      renderPracticeModal();
+      document.getElementById('challenges-modal').style.display = 'flex';
+      setTimeout(() => {
+        const lvl9Section = document.getElementById('chal-level-9');
+        if (lvl9Section) lvl9Section.scrollIntoView({ behavior: 'smooth' });
+      }, 50);
     } else if (name === 'learn') {
       renderLearnContent();
       document.getElementById('learn-modal').style.display = 'flex';
@@ -3888,15 +4172,13 @@ function renderSuggestionsList(suggestions) {
 window.trySuggestionQuest = function(idx) {
   const sug = generatedSuggestions[idx];
   if (!sug) return;
-  editor.value = sug.suggestedQuery || `-- Quest: ${sug.question}\n`;
+  editor.value = `-- 🎯 QUEST:\n-- ${sug.question}\n-- 💡 HINT:\n-- ${sug.hint}\n\n-- Write your SQL query here...\n`;
   updateGutter();
   
   const tabEditor = document.getElementById('tab-editor');
   if (tabEditor) {
     tabEditor.click();
   }
-
-  runQuery();
 };
 
 window.toggleSuggestionHint = function(idx) {
